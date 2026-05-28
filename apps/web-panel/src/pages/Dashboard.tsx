@@ -51,23 +51,25 @@ export default function Dashboard() {
         </div>
 
         {/* token so carrega se a variavel existir no .env */}
-        <Map
-          {...viewState}
-          onMove={evt => setViewState(evt.viewState)}
-          mapStyle="mapbox://styles/mapbox/streets-v12"
-          mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-          className="min-h-[75vh] w-full rounded-lg shadow-md overflow-hidden"
-        >
-          {/* pinos de teste */}
-          {MARCADORES.map((m) => (
-            <Marker
-              key={m.id}
-              longitude={m.longitude}
-              latitude={m.latitude}
-              color="red"
-            />
-          ))}
-        </Map>
+        <div className="min-h-[75vh] w-full rounded-lg shadow-md overflow-hidden">
+          <Map
+            {...viewState}
+            onMove={evt => setViewState(evt.viewState)}
+            mapStyle="mapbox://styles/mapbox/streets-v12"
+            mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+            style={{ width: '100%', height: '100%' }}
+          >
+            {/* pinos de teste */}
+            {MARCADORES.map((m) => (
+              <Marker
+                key={m.id}
+                longitude={m.longitude}
+                latitude={m.latitude}
+                color="red"
+              />
+            ))}
+          </Map>
+        </div>
       </div>
     </div>
   )
