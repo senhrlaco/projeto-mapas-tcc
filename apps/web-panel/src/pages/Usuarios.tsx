@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
+// campos conforme model Usuario do Prisma
 type Usuario = {
-  id: number
+  id: string
   nome: string
-  login: string
-  nivel: string
-  ativo: boolean
+  username: string
+  role: string
 }
 
 export default function Usuarios() {
@@ -46,7 +46,7 @@ export default function Usuarios() {
     async function carregarUsuarios() {
       setCarregando(true)
       try {
-        const res = await fetch(`${baseURL}/api/usuarios`, {
+        const res = await fetch(`${baseURL}/usuarios`, {
           headers: headersAutenticados(),
         })
 
@@ -90,18 +90,18 @@ export default function Usuarios() {
   function handleEditar(user: Usuario) {
     setUsuarioEmEdicao(user)
     setNome(user.nome)
-    setLogin(user.login)
+    setLogin(user.username)
     setSenha('') // senha nunca trafega de volta pro front
-    setNivel(user.nivel)
+    setNivel(user.role)
     setModalAberto(true)
   }
 
-  async function handleExcluir(id: number) {
+  async function handleExcluir(id: string) {
     if (!window.confirm('Tem certeza que quer excluir esse usuario?')) return
 
     setCarregando(true)
     try {
-      const res = await fetch(`${baseURL}/api/usuarios/${id}`, {
+      const res = await fetch(`${baseURL}/usuarios/${id}`, {
         method: 'DELETE',
         headers: headersAutenticados(),
       })
@@ -138,12 +138,12 @@ export default function Usuarios() {
       const ehEdicao = usuarioEmEdicao !== null
 
       const url = ehEdicao
-        ? `${baseURL}/api/usuarios/${usuarioEmEdicao.id}`
-        : `${baseURL}/api/usuarios`
+        ? `${baseURL}/usuarios/${usuarioEmEdicao.id}`
+        : `${baseURL}/usuarios`
 
-      // na edicao, a senha so entra no payload se o campo foi preenchido
-      const corpo: Record<string, unknown> = { nome, login, nivel }
-      if (!ehEdicao) corpo.senha = senha
+      // traduz os estados locais para os campos que o servidor espera
+      const corpo: Record<string, unknown> = { name: nome, email: login, role: nivel }
+      if (!ehEdicao) corpo.password = senha
 
       const res = await fetch(url, {
         method: ehEdicao ? 'PUT' : 'POST',
@@ -201,14 +201,13 @@ export default function Usuarios() {
               <th className="px-5 py-3 font-semibold text-gray-600">Nome</th>
               <th className="px-5 py-3 font-semibold text-gray-600">Usuario (Login)</th>
               <th className="px-5 py-3 font-semibold text-gray-600">Nivel</th>
-              <th className="px-5 py-3 font-semibold text-gray-600">Status</th>
               <th className="px-5 py-3 font-semibold text-gray-600">Acoes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {carregando && usuarios.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-400">
+                <td colSpan={4} className="px-5 py-6 text-center text-sm text-gray-400">
                   Carregando...
                 </td>
               </tr>
@@ -216,16 +215,8 @@ export default function Usuarios() {
               usuarios.map((u) => (
                 <tr key={u.id}>
                   <td className="px-5 py-3 text-gray-800 font-medium">{u.nome}</td>
-                  <td className="px-5 py-3 text-gray-500">{u.login}</td>
-                  <td className="px-5 py-3 text-gray-500">{u.nivel}</td>
-                  <td className="px-5 py-3">
-                    <span className={
-                      'text-xs font-semibold px-2 py-1 rounded-full ' +
-                      (u.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600')
-                    }>
-                      {u.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
+                  <td className="px-5 py-3 text-gray-500">{u.username}</td>
+                  <td className="px-5 py-3 text-gray-500">{u.role}</td>
                   <td className="px-5 py-3">
                     <div className="flex gap-2">
                       <button

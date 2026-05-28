@@ -26,15 +26,68 @@ app.get('/ping', async (req, res) => {
   return res.json({ status: 'ok', totalUsuarios: usersCount });
 });
 
+// lista todos os usuarios do painel
+app.get('/usuarios', async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      select: { id: true, nome: true, username: true, role: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(usuarios);
+  } catch (error) {
+    console.error('[GET /usuarios]', error);
+    return res.status(500).json({ error: 'erro ao buscar usuarios' });
+  }
+});
+
+// cadastra um novo usuario do painel
 app.post('/usuarios', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    const user = await prisma.user.create({
-      data: { name, email, password }
+    const { name, email, password, role } = req.body;
+    const usuario = await prisma.usuario.create({
+      data: {
+        nome: name,
+        username: email,
+        password,
+        role: role ?? 'AGENTE',
+      },
     });
-    return res.json(user);
+    return res.json(usuario);
   } catch (error) {
+    console.error('[POST /usuarios]', error);
     return res.status(500).json({ error: 'erro ao criar usuario' });
+  }
+});
+
+// atualiza nome, username e role de um usuario existente
+app.put('/usuarios/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role } = req.body;
+    const usuario = await prisma.usuario.update({
+      where: { id },
+      data: {
+        nome: name,
+        username: email,
+        role,
+      },
+    });
+    return res.json(usuario);
+  } catch (error) {
+    console.error('[PUT /usuarios/:id]', error);
+    return res.status(500).json({ error: 'erro ao atualizar usuario' });
+  }
+});
+
+// remove um usuario do painel
+app.delete('/usuarios/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.usuario.delete({ where: { id } });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('[DELETE /usuarios/:id]', error);
+    return res.status(500).json({ error: 'erro ao excluir usuario' });
   }
 });
 
