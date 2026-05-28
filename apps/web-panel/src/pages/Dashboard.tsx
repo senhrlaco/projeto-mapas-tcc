@@ -1,30 +1,76 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Map, Marker } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
+
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
 // token do mapbox via variavel de ambiente do Vite
 // crie um .env com VITE_MAPBOX_TOKEN=pk.eyJ...
 
-// pinos de teste das duas unidades do TCC
-const MARCADORES = [
-  { id: 'centro', longitude: -43.1772, latitude: -22.9027, rotulo: 'Centro - Contabilidade Alpha' },
-  { id: 'meier',  longitude: -43.2831, latitude: -22.9024, rotulo: 'Meier - Clinica Medica Vida' },
-]
+type CardResumo = {
+  titulo: string
+  valor: string
+  detalhe: string
+}
+
+type Marcador = {
+  id: string
+  longitude: number
+  latitude: number
+  rotulo: string
+}
+
+type DadosDashboard = {
+  cards: CardResumo[]
+  marcadores: Marcador[]
+}
 
 export default function Dashboard() {
-  // numeros ficticios ate ligar na API
-  const cards = [
-    { titulo: 'Total de Visitas', valor: '128', detalhe: 'no mes atual' },
-    { titulo: 'Fora do Raio',     valor: '14',  detalhe: 'alertas geofence' },
-    { titulo: 'Pendentes',        valor: '7',   detalhe: 'aguardando registro' },
-  ]
+  const navigate = useNavigate()
 
-  // estado da camera do mapa - centro do RJ
+  const [cards, setCards] = useState<CardResumo[]>([])
+  const [marcadores, setMarcadores] = useState<Marcador[]>([])
+
+  // estado da camera do mapa - centro do RJ como posicao inicial
   const [viewState, setViewState] = useState({
     longitude: -43.1772,
-    latitude:  -22.9027,
-    zoom:      11,
+    latitude: -22.9027,
+    zoom: 11,
   })
+
+  useEffect(() => {
+    async function carregarDashboard() {
+      try {
+        const res = await fetch(`${baseURL}/api/dashboard`, {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('token'),
+          },
+        })
+
+        // token expirado ou sem permissao: manda pro login
+        if (res.status === 401 || res.status === 403) {
+          localStorage.clear()
+          navigate('/login')
+          return
+        }
+
+        if (!res.ok) {
+          console.error('Falha ao carregar dados do dashboard:', res.status)
+          return
+        }
+
+        const data: DadosDashboard = await res.json()
+        setCards(data.cards)
+        setMarcadores(data.marcadores)
+      } catch {
+        // sem alert pra nao irritar o usuario toda vez que a rede cair
+        console.error('Nao foi possivel conectar ao servidor para carregar o dashboard.')
+      }
+    }
+
+    carregarDashboard()
+  }, [])
 
   return (
     <div className="p-8">
@@ -59,8 +105,7 @@ export default function Dashboard() {
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%' }}
           >
-            {/* pinos de teste */}
-            {MARCADORES.map((m) => (
+            {marcadores.map((m) => (
               <Marker
                 key={m.id}
                 longitude={m.longitude}

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-// tipo do usuario da tabela
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
+
 type Usuario = {
   id: number
   nome: string
@@ -9,27 +11,63 @@ type Usuario = {
   ativo: boolean
 }
 
-// mock provisorio, depois vamos ligar na API
-const dadosIniciais: Usuario[] = [
-  { id: 1, nome: 'Lucas Menezes', login: 'lucas.menezes', nivel: 'ADM Master', ativo: true },
-  { id: 2, nome: 'Rafaela Costa', login: 'rafaela.costa', nivel: 'Gestor',     ativo: true },
-  { id: 3, nome: 'Bruno Alves',   login: 'bruno.alves',   nivel: 'Agente',     ativo: false },
-]
-
 export default function Usuarios() {
-  const [usuarios, setUsuarios] = useState<Usuario[]>(dadosIniciais)
+  const navigate = useNavigate()
 
-  // abre e fecha o modal
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [carregando, setCarregando] = useState(false)
+
   const [modalAberto, setModalAberto] = useState(false)
-
-  // guarda qual usuario ta sendo editado (null = modo criacao)
   const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<Usuario | null>(null)
 
-  // campos do form
   const [nome, setNome] = useState('')
   const [login, setLogin] = useState('')
   const [senha, setSenha] = useState('')
   const [nivel, setNivel] = useState('Agente')
+
+  // monta os headers padrao com o token do usuario logado
+  function headersAutenticados(): HeadersInit {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + localStorage.getItem('token'),
+    }
+  }
+
+  // redireciona pro login quando o servidor recusar o acesso
+  function tratarFalhaDeAutenticacao(status: number) {
+    if (status === 401 || status === 403) {
+      localStorage.clear()
+      navigate('/login')
+    }
+  }
+
+  // busca a lista de usuarios ao montar a pagina
+  useEffect(() => {
+    async function carregarUsuarios() {
+      setCarregando(true)
+      try {
+        const res = await fetch(`${baseURL}/api/usuarios`, {
+          headers: headersAutenticados(),
+        })
+
+        tratarFalhaDeAutenticacao(res.status)
+
+        if (!res.ok) {
+          alert('Nao foi possivel carregar os usuarios.')
+          return
+        }
+
+        const data: Usuario[] = await res.json()
+        setUsuarios(data)
+      } catch {
+        alert('Falha de conexao ao buscar usuarios.')
+      } finally {
+        setCarregando(false)
+      }
+    }
+
+    carregarUsuarios()
+  }, [])
 
   function abrirModalNovo() {
     setUsuarioEmEdicao(null)
@@ -49,56 +87,93 @@ export default function Usuarios() {
     setNivel('Agente')
   }
 
-  // abre o modal ja preenchido com os dados do usuario
   function handleEditar(user: Usuario) {
-    alert(`Editando: ${user.nome} (${user.login})`)
     setUsuarioEmEdicao(user)
     setNome(user.nome)
     setLogin(user.login)
-    setSenha('') // senha nao fica exposta
+    setSenha('') // senha nunca trafega de volta pro front
     setNivel(user.nivel)
     setModalAberto(true)
   }
 
-  // pede confirmacao antes de remover da lista
-  function handleExcluir(id: number) {
-    if (window.confirm('Tem certeza que quer excluir esse usuario?')) {
-      // TODO: chamar DELETE na API
-      alert('Usuario removido com sucesso (dados temporarios, nao persiste)')
-      setUsuarios(usuarios.filter((u) => u.id !== id))
+  async function handleExcluir(id: number) {
+    if (!window.confirm('Tem certeza que quer excluir esse usuario?')) return
+
+    setCarregando(true)
+    try {
+      const res = await fetch(`${baseURL}/api/usuarios/${id}`, {
+        method: 'DELETE',
+        headers: headersAutenticados(),
+      })
+
+      tratarFalhaDeAutenticacao(res.status)
+
+      if (!res.ok) {
+        alert('Nao foi possivel excluir o usuario.')
+        return
+      }
+
+      // atualiza a lista local sem precisar re-buscar tudo
+      setUsuarios((prev) => prev.filter((u) => u.id !== id))
+    } catch {
+      alert('Falha de conexao ao excluir usuario.')
+    } finally {
+      setCarregando(false)
     }
   }
 
-  function salvar() {
+  async function salvar() {
     if (!nome || !login) {
       alert('Nome e usuario sao obrigatorios')
       return
     }
 
-    if (usuarioEmEdicao) {
-      // TODO: chamar PUT na API
-      setUsuarios(usuarios.map((u) =>
-        u.id === usuarioEmEdicao.id ? { ...u, nome, login, nivel } : u
-      ))
-      alert(`Mock: usuario "${login}" atualizado`)
-    } else {
-      if (!senha) {
-        alert('Senha e obrigatoria para novo usuario')
-        return
-      }
-      // TODO: chamar POST na API
-      const novo: Usuario = {
-        id: Date.now(),
-        nome,
-        login,
-        nivel,
-        ativo: true,
-      }
-      setUsuarios([...usuarios, novo])
-      alert(`Mock: usuario "${login}" cadastrado`)
+    if (!usuarioEmEdicao && !senha) {
+      alert('Senha e obrigatoria para novo usuario')
+      return
     }
 
-    fecharModal()
+    setCarregando(true)
+    try {
+      const ehEdicao = usuarioEmEdicao !== null
+
+      const url = ehEdicao
+        ? `${baseURL}/api/usuarios/${usuarioEmEdicao.id}`
+        : `${baseURL}/api/usuarios`
+
+      // na edicao, a senha so entra no payload se o campo foi preenchido
+      const corpo: Record<string, unknown> = { nome, login, nivel }
+      if (!ehEdicao) corpo.senha = senha
+
+      const res = await fetch(url, {
+        method: ehEdicao ? 'PUT' : 'POST',
+        headers: headersAutenticados(),
+        body: JSON.stringify(corpo),
+      })
+
+      tratarFalhaDeAutenticacao(res.status)
+
+      if (!res.ok) {
+        alert('Nao foi possivel salvar o usuario.')
+        return
+      }
+
+      const usuarioSalvo: Usuario = await res.json()
+
+      if (ehEdicao) {
+        setUsuarios((prev) =>
+          prev.map((u) => (u.id === usuarioSalvo.id ? usuarioSalvo : u))
+        )
+      } else {
+        setUsuarios((prev) => [...prev, usuarioSalvo])
+      }
+
+      fecharModal()
+    } catch {
+      alert('Falha de conexao ao salvar usuario.')
+    } finally {
+      setCarregando(false)
+    }
   }
 
   return (
@@ -111,7 +186,8 @@ export default function Usuarios() {
         </div>
         <button
           onClick={abrirModalNovo}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+          disabled={carregando}
+          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold px-4 py-2 rounded-lg"
         >
           Novo Usuario
         </button>
@@ -130,37 +206,47 @@ export default function Usuarios() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {usuarios.map((u) => (
-              <tr key={u.id}>
-                <td className="px-5 py-3 text-gray-800 font-medium">{u.nome}</td>
-                <td className="px-5 py-3 text-gray-500">{u.login}</td>
-                <td className="px-5 py-3 text-gray-500">{u.nivel}</td>
-                <td className="px-5 py-3">
-                  <span className={
-                    'text-xs font-semibold px-2 py-1 rounded-full ' +
-                    (u.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600')
-                  }>
-                    {u.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td className="px-5 py-3">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditar(u)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleExcluir(u.id)}
-                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded"
-                    >
-                      Excluir
-                    </button>
-                  </div>
+            {carregando && usuarios.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-6 text-center text-sm text-gray-400">
+                  Carregando...
                 </td>
               </tr>
-            ))}
+            ) : (
+              usuarios.map((u) => (
+                <tr key={u.id}>
+                  <td className="px-5 py-3 text-gray-800 font-medium">{u.nome}</td>
+                  <td className="px-5 py-3 text-gray-500">{u.login}</td>
+                  <td className="px-5 py-3 text-gray-500">{u.nivel}</td>
+                  <td className="px-5 py-3">
+                    <span className={
+                      'text-xs font-semibold px-2 py-1 rounded-full ' +
+                      (u.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600')
+                    }>
+                      {u.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditar(u)}
+                        disabled={carregando}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-semibold px-3 py-1.5 rounded"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleExcluir(u.id)}
+                        disabled={carregando}
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-semibold px-3 py-1.5 rounded"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -235,15 +321,17 @@ export default function Usuarios() {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={fecharModal}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                disabled={carregando}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvar}
-                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                disabled={carregando}
+                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg"
               >
-                Salvar
+                {carregando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
           </div>
