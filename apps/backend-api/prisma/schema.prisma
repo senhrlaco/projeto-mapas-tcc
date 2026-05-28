@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+provider = "postgresql"
+url      = env("DATABASE_URL")
+}
+
+// status de quem loga, admin ve tudo
+enum Role {
+  ADMIN
+  SUPERVISOR
+  COLABORADOR
+}
+
+// os retornos que vão para banco e para dashboard
+enum CheckInStatus {
+  VALIDO
+  FORA_DA_CERCA
+  FRAUDE_DETECTADA
+}
+
+// tabela dos usuários do app
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String    // senha com hash se não dá ruim
+  role      Role      @default(COLABORADOR)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  visits    Visit[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+// os locais onde tem que ir
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  latitude  Float    // lat oficial do lugar
+  longitude Float    // long oficial
+  createdAt DateTime @default(now())
+
+  visits    Visit[]
+
+  @@map("clients")
+}
+
+// parte do check in
+model Visit {
+  id              String        @id @default(uuid())
+  userId          String
+  clientId        String
+  
+  // lat e long que o celular manda quando aperta o botão
+  capturedLat     Float
+  capturedLng     Float
+  gpsAccuracy     Float         // se for > 50m o sinal ta um lixo ou eh fake
+  
+  // parte do calculo do node
+  distanceToDest  Float         // o calculo haversine
+  status          CheckInStatus
+  isMocked        Boolean       // flag para ver se está usando fake gps
+  
+  // timestamps para ver se a hora bate
+  deviceTimestamp DateTime      
+  serverTimestamp DateTime      @default(now())
+
+  user            User          @relation(fields: [userId], references: [id])
+  client          Client        @relation(fields: [clientId], references: [id])
+  auditLogs       AuditLog[]
+
+  @@index([userId, serverTimestamp])
+  @@map("visits")
+}
+
+// logs do sistema
+model AuditLog {
+  id          String   @id @default(uuid())
+  visitId     String?
+  action      String   // log in estranho
+  description String
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  visit       Visit?   @relation(fields: [visitId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// para nao ter que fazer login toda hora (controle do jwt)
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  deviceInfo   String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// modelo de autenticacao baseado em username/password
+// criado pelo admin, sem fluxo de e-mail
+model Usuario {
+  id        String    @id @default(uuid())
+  nome      String
+  username  String    @unique // login de acesso, ex: lucas.menezes
+  password  String    // armazena a hash bcrypt, nunca texto puro
+  role      String    // ex: 'ADMIN', 'AGENTE'
+  createdAt DateTime  @default(now())
+
+  checkins  Checkin[]
+
+  @@map("usuarios")
+}
+
+// modelo de check-in logistico para controle de geofencing e antifraude
+model Checkin {
+  id             String   @id @default(uuid())
+  colaboradorId  String   // FK para Usuario.id
+  clienteId      String
+  latitude       Float
+  longitude      Float
+  isMocked       Boolean
+  status         String
+  alertaGeofence Boolean
+  createdAt      DateTime @default(now())
+
+  colaborador    Usuario  @relation(fields: [colaboradorId], references: [id])
+
+  @@index([colaboradorId, createdAt])
+  @@map("checkins")
+}
