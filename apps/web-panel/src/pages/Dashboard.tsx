@@ -1,35 +1,47 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Map, Marker } from 'react-map-gl/mapbox'
+import type { MapMouseEvent } from 'react-map-gl/mapbox'
+import useSWR from 'swr'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import { fetcher } from '../lib/fetcher'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
 // token do mapbox via variavel de ambiente do Vite
-// crie um .env com VITE_MAPBOX_TOKEN=pk.eyJ...
+// adicione VITE_MAPBOX_TOKEN=pk.eyJ... no .env do web-panel
 
-// shape exato que o /ping retorna
+type Visita = {
+  id: string
+  status: string
+  distanceToDest: number
+  serverTimestamp: string
+  user: { name: string }
+  client: { name: string }
+}
+
+type Cliente = {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+}
+
 type RespostaPing = {
   status: string
   totalUsuarios: number
 }
 
-type CardResumo = {
-  titulo: string
-  valor: string
-  detalhe: string
-}
-
-// posicoes fixas dos clientes cadastrados no banco — substituir por GET /clientes quando a rota existir
-const MARCADORES_FIXOS = [
-  { id: 'centro', longitude: -43.1772, latitude: -22.9027, rotulo: 'Centro - Contabilidade Alpha' },
-  { id: 'meier', longitude: -43.2831, latitude: -22.9024, rotulo: 'Meier - Clinica Medica Vida' },
-]
-
 export default function Dashboard() {
   const navigate = useNavigate()
 
-  const [cards, setCards] = useState<CardResumo[]>([])
+  // modal de cadastro de cliente
+  const [modalClienteAberto, setModalClienteAberto] = useState(false)
+  const [isAddingClient, setIsAddingClient] = useState(false)
+  const [nomeCliente, setNomeCliente] = useState('')
+  const [enderecoCliente, setEnderecoCliente] = useState('')
+  const [coordCapturada, setCoordCapturada] = useState<{ lat: number; lng: number } | null>(null)
+  const [salvandoCliente, setSalvandoCliente] = useState(false)
 
   // estado da camera do mapa - centro do RJ como posicao inicial
   const [viewState, setViewState] = useState({
@@ -38,86 +50,311 @@ export default function Dashboard() {
     zoom: 11,
   })
 
-  useEffect(() => {
-    async function carregarDashboard() {
-      try {
-        const res = await fetch(`${baseURL}/ping`, {
-          headers: {
-            'Authorization': 'Bearer ' + localStorage.getItem('token'),
-          },
-        })
+  // busca os totais do servidor — sem polling, dado estatico o suficiente
+  const { data: ping, error: pingError } = useSWR<RespostaPing>(`${baseURL}/ping`, fetcher)
 
-        // token expirado ou sem permissao: manda pro login
-        if (res.status === 401 || res.status === 403) {
-          localStorage.clear()
-          navigate('/login')
-          return
-        }
+  // busca a lista de clientes para renderizar no mapa — sem polling
+  const {
+    data: clientes = [],
+    mutate: mutateClientes,
+    error: clientesError,
+  } = useSWR<Cliente[]>(`${baseURL}/clientes`, fetcher)
 
-        if (!res.ok) {
-          console.error('Falha ao carregar dados do dashboard:', res.status)
-          return
-        }
+  // polling de visitas a cada 10 segundos via refreshInterval do SWR
+  // o SWR gerencia o intervalo internamente, sem setInterval manual nem risco de memory leak
+  const { data: visitas = [], error: visitasError } = useSWR<Visita[]>(
+    `${baseURL}/visitas`,
+    fetcher,
+    { refreshInterval: 10_000 },
+  )
 
-        const data: RespostaPing = await res.json()
+  // redireciona pro login se qualquer requisicao retornar 401 ou 403
+  const erros = [pingError, clientesError, visitasError]
+  const erroDeAutenticacao = erros.some(
+    (e) => e && ((e as Error & { status?: number }).status === 401 || (e as Error & { status?: number }).status === 403),
+  )
+  if (erroDeAutenticacao) {
+    localStorage.clear()
+    navigate('/login')
+  }
 
-        // transforma a resposta do /ping nos cards da tela
-        setCards([
-          { titulo: 'Usuarios Cadastrados', valor: String(data.totalUsuarios), detalhe: 'registros ativos no banco' },
-        ])
-      } catch {
-        // sem alert pra nao irritar o usuario toda vez que a rede cair
-        console.error('Nao foi possivel conectar ao servidor para carregar o dashboard.')
-      }
+  // headers para as operacoes de escrita que nao passam pelo fetcher
+  function headersEscrita(): HeadersInit {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + localStorage.getItem('token'),
+    }
+  }
+
+  // captura o clique no mapa quando o modo de adicao de cliente esta ativo
+  function handleMapClick(e: MapMouseEvent) {
+    if (!isAddingClient) return
+    setCoordCapturada({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+    setEnderecoCliente(`${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`)
+  }
+
+  function abrirModalCliente() {
+    setNomeCliente('')
+    setEnderecoCliente('')
+    setCoordCapturada(null)
+    setIsAddingClient(false)
+    setModalClienteAberto(true)
+  }
+
+  function fecharModalCliente() {
+    setModalClienteAberto(false)
+    setIsAddingClient(false)
+    setNomeCliente('')
+    setEnderecoCliente('')
+    setCoordCapturada(null)
+  }
+
+  async function salvarCliente() {
+    if (!nomeCliente || !coordCapturada) {
+      alert('Informe o nome e clique no mapa para capturar a localizacao.')
+      return
     }
 
-    carregarDashboard()
-  }, [])
+    setSalvandoCliente(true)
+    try {
+      const res = await fetch(`${baseURL}/clientes`, {
+        method: 'POST',
+        headers: headersEscrita(),
+        body: JSON.stringify({
+          name: nomeCliente,
+          address: enderecoCliente,
+          latitude: coordCapturada.lat,
+          longitude: coordCapturada.lng,
+        }),
+      })
+
+      if (res.status === 401 || res.status === 403) {
+        localStorage.clear()
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        alert('Nao foi possivel cadastrar o cliente.')
+        return
+      }
+
+      // invalida o cache do SWR para atualizar o mapa sem recarregar a pagina
+      mutateClientes()
+      fecharModalCliente()
+    } catch {
+      alert('Falha de conexao ao cadastrar cliente.')
+    } finally {
+      setSalvandoCliente(false)
+    }
+  }
 
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Visao Geral</h1>
-        <p className="text-sm text-gray-500 mt-1">Resumo das operacoes de campo</p>
+
+      {/* cabecalho */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Visao Geral</h1>
+          <p className="text-sm text-gray-500 mt-1">Resumo das operacoes de campo</p>
+        </div>
+        <button
+          onClick={abrirModalCliente}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+        >
+          Cadastrar Cliente
+        </button>
       </div>
 
       {/* cards de resumo */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        {cards.map((card) => (
-          <div key={card.titulo} className="bg-white rounded-lg shadow-md p-5">
-            <p className="text-sm text-gray-500">{card.titulo}</p>
-            <p className="text-3xl font-bold text-gray-800 mt-1">{card.valor}</p>
-            <p className="text-xs text-gray-400 mt-1">{card.detalhe}</p>
-          </div>
-        ))}
+        <div className="bg-white rounded-lg shadow-md p-5">
+          <p className="text-sm text-gray-500">Usuarios Cadastrados</p>
+          <p className="text-3xl font-bold text-gray-800 mt-1">{ping?.totalUsuarios ?? '--'}</p>
+          <p className="text-xs text-gray-400 mt-1">registros ativos no banco</p>
+        </div>
+
+        {/* card de total de visitas — atualiza junto com o polling do SWR */}
+        <div className="bg-white rounded-lg shadow-md p-5">
+          <p className="text-sm text-gray-500">Visitas Recentes</p>
+          <p className="text-3xl font-bold text-gray-800 mt-1">{visitas.length}</p>
+          <p className="text-xs text-gray-400 mt-1">ultimas 50 registradas</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-md p-5">
+          <p className="text-sm text-gray-500">Pontos no Mapa</p>
+          <p className="text-3xl font-bold text-gray-800 mt-1">{clientes.length}</p>
+          <p className="text-xs text-gray-400 mt-1">clientes cadastrados</p>
+        </div>
       </div>
 
       {/* mapa mapbox */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-700">Mapa de Visitas</p>
+          {isAddingClient && (
+            <span className="text-xs text-blue-600 font-medium animate-pulse">
+              Clique no mapa para marcar a localizacao do cliente
+            </span>
+          )}
         </div>
 
-        {/* token so carrega se a variavel existir no .env */}
-        <div className="min-h-[75vh] w-full rounded-lg shadow-md overflow-hidden">
+        <div className="min-h-[75vh] w-full overflow-hidden">
           <Map
             {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
+            onMove={(evt) => setViewState(evt.viewState)}
+            onClick={handleMapClick}
             mapStyle="mapbox://styles/mapbox/streets-v12"
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
             style={{ width: '100%', height: '600px' }}
+            cursor={isAddingClient ? 'crosshair' : 'grab'}
           >
-            {MARCADORES_FIXOS.map((m) => (
+            {/* pinos dos clientes — coordenadas validadas para evitar NaN no Mapbox */}
+            {clientes.map((c) => {
+              const lat = Number(c.latitude)
+              const lng = Number(c.longitude)
+              if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null
+              return (
+                <Marker
+                  key={c.id}
+                  longitude={lng}
+                  latitude={lat}
+                  color="#2563eb"
+                />
+              )
+            })}
+
+            {/* pino temporario da coordenada capturada antes de salvar */}
+            {coordCapturada && !isNaN(coordCapturada.lat) && !isNaN(coordCapturada.lng) && (
               <Marker
-                key={m.id}
-                longitude={m.longitude}
-                latitude={m.latitude}
-                color="red"
+                longitude={Number(coordCapturada.lng)}
+                latitude={Number(coordCapturada.lat)}
+                color="#f59e0b"
               />
-            ))}
+            )}
           </Map>
         </div>
       </div>
+
+      {/* tabela das ultimas visitas */}
+      {visitas.length > 0 && (
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <p className="text-sm font-semibold text-gray-700">Ultimas Visitas</p>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-left">
+                <th className="px-5 py-3 font-semibold text-gray-600">Agente</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Cliente</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Status</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Distancia</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Horario</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visitas.map((v) => (
+                <tr key={v.id}>
+                  <td className="px-5 py-3 text-gray-800 font-medium">{v.user.name}</td>
+                  <td className="px-5 py-3 text-gray-500">{v.client.name}</td>
+                  <td className="px-5 py-3">
+                    <span className={
+                      'text-xs font-semibold px-2 py-1 rounded-full ' +
+                      (v.status === 'VALIDO'
+                        ? 'bg-green-100 text-green-700'
+                        : v.status === 'FORA_DA_CERCA'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-red-100 text-red-600')
+                    }>
+                      {v.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-gray-500">{Math.round(v.distanceToDest)} m</td>
+                  <td className="px-5 py-3 text-gray-400 text-xs">
+                    {new Date(v.serverTimestamp).toLocaleString('pt-BR')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* modal de cadastro de cliente */}
+      {modalClienteAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* fundo escuro */}
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={fecharModalCliente}
+          />
+
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-5">Cadastrar Cliente</h2>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Cliente</label>
+                <input
+                  type="text"
+                  placeholder="Razao social ou nome fantasia"
+                  value={nomeCliente}
+                  onChange={(e) => setNomeCliente(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Endereco</label>
+                <input
+                  type="text"
+                  placeholder="Clique no mapa para preencher automaticamente"
+                  value={enderecoCliente}
+                  onChange={(e) => setEnderecoCliente(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  readOnly={coordCapturada !== null}
+                />
+              </div>
+
+              {/* botao que ativa o modo de captura de coordenada no mapa */}
+              <button
+                onClick={() => setIsAddingClient((prev) => !prev)}
+                className={
+                  'w-full text-sm font-semibold py-2 rounded-lg border transition-colors ' +
+                  (isAddingClient
+                    ? 'bg-blue-50 border-blue-500 text-blue-700'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50')
+                }
+              >
+                {isAddingClient ? 'Aguardando clique no mapa...' : 'Selecionar no Mapa'}
+              </button>
+
+              {coordCapturada && (
+                <p className="text-xs text-gray-400">
+                  Lat: {coordCapturada.lat.toFixed(5)}, Lng: {coordCapturada.lng.toFixed(5)}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={fecharModalCliente}
+                disabled={salvandoCliente}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarCliente}
+                disabled={salvandoCliente || !coordCapturada}
+                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg"
+              >
+                {salvandoCliente ? 'Salvando...' : 'Salvar Cliente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

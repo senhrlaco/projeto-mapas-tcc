@@ -26,6 +26,38 @@ app.get('/ping', async (req, res) => {
   return res.json({ status: 'ok', totalUsuarios: usersCount });
 });
 
+// ultimas 50 visitas com dados do agente e do cliente para o dashboard
+app.get('/visitas', async (req, res) => {
+  try {
+    const visitas = await prisma.visit.findMany({
+      take: 50,
+      orderBy: { serverTimestamp: 'desc' },
+      include: {
+        user: { select: { name: true } },
+        client: { select: { name: true } },
+      },
+    });
+    return res.json(visitas);
+  } catch (error) {
+    console.error('[GET /visitas]', error);
+    return res.status(500).json({ error: 'erro ao buscar visitas' });
+  }
+});
+
+// todos os pontos de destino para renderizar no mapa
+app.get('/clientes', async (req, res) => {
+  try {
+    const clientes = await prisma.client.findMany({
+      select: { id: true, name: true, latitude: true, longitude: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return res.json(clientes);
+  } catch (error) {
+    console.error('[GET /clientes]', error);
+    return res.status(500).json({ error: 'erro ao buscar clientes' });
+  }
+});
+
 // lista todos os usuarios do painel
 app.get('/usuarios', async (req, res) => {
   try {

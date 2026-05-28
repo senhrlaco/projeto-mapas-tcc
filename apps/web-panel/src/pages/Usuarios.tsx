@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
+import { fetcher } from '../lib/fetcher'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
@@ -14,8 +16,17 @@ type Usuario = {
 export default function Usuarios() {
   const navigate = useNavigate()
 
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [carregando, setCarregando] = useState(false)
+  // o SWR busca e cacheia a lista; ao voltar para esta rota, exibe o cache imediatamente
+  // enquanto revalida em segundo plano — sem tela em branco na navegacao
+  const {
+    data: usuarios = [],
+    isLoading,
+    mutate,
+    error,
+  } = useSWR<Usuario[]>(`${baseURL}/usuarios`, fetcher)
+
+  // estado de operacoes de escrita (POST, PUT, DELETE) — separado do loading do SWR
+  const [salvando, setSalvando] = useState(false)
 
   const [modalAberto, setModalAberto] = useState(false)
   const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<Usuario | null>(null)
@@ -25,49 +36,26 @@ export default function Usuarios() {
   const [senha, setSenha] = useState('')
   const [nivel, setNivel] = useState('Agente')
 
-  // monta os headers padrao com o token do usuario logado
-  function headersAutenticados(): HeadersInit {
+  // redireciona pro login se o SWR receber 401 ou 403
+  if (error && (error as Error & { status?: number }).status === 401 || error && (error as Error & { status?: number }).status === 403) {
+    localStorage.clear()
+    navigate('/login')
+  }
+
+  // headers para as operacoes de escrita que nao passam pelo fetcher
+  function headersEscrita(): HeadersInit {
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + localStorage.getItem('token'),
     }
   }
 
-  // redireciona pro login quando o servidor recusar o acesso
   function tratarFalhaDeAutenticacao(status: number) {
     if (status === 401 || status === 403) {
       localStorage.clear()
       navigate('/login')
     }
   }
-
-  // busca a lista de usuarios ao montar a pagina
-  useEffect(() => {
-    async function carregarUsuarios() {
-      setCarregando(true)
-      try {
-        const res = await fetch(`${baseURL}/usuarios`, {
-          headers: headersAutenticados(),
-        })
-
-        tratarFalhaDeAutenticacao(res.status)
-
-        if (!res.ok) {
-          alert('Nao foi possivel carregar os usuarios.')
-          return
-        }
-
-        const data: Usuario[] = await res.json()
-        setUsuarios(data)
-      } catch {
-        alert('Falha de conexao ao buscar usuarios.')
-      } finally {
-        setCarregando(false)
-      }
-    }
-
-    carregarUsuarios()
-  }, [])
 
   function abrirModalNovo() {
     setUsuarioEmEdicao(null)
@@ -99,11 +87,11 @@ export default function Usuarios() {
   async function handleExcluir(id: string) {
     if (!window.confirm('Tem certeza que quer excluir esse usuario?')) return
 
-    setCarregando(true)
+    setSalvando(true)
     try {
       const res = await fetch(`${baseURL}/usuarios/${id}`, {
         method: 'DELETE',
-        headers: headersAutenticados(),
+        headers: headersEscrita(),
       })
 
       tratarFalhaDeAutenticacao(res.status)
@@ -113,12 +101,12 @@ export default function Usuarios() {
         return
       }
 
-      // atualiza a lista local sem precisar re-buscar tudo
-      setUsuarios((prev) => prev.filter((u) => u.id !== id))
+      // invalida o cache do SWR para que a lista seja atualizada imediatamente
+      mutate()
     } catch {
       alert('Falha de conexao ao excluir usuario.')
     } finally {
-      setCarregando(false)
+      setSalvando(false)
     }
   }
 
@@ -133,7 +121,7 @@ export default function Usuarios() {
       return
     }
 
-    setCarregando(true)
+    setSalvando(true)
     try {
       const ehEdicao = usuarioEmEdicao !== null
 
@@ -147,7 +135,7 @@ export default function Usuarios() {
 
       const res = await fetch(url, {
         method: ehEdicao ? 'PUT' : 'POST',
-        headers: headersAutenticados(),
+        headers: headersEscrita(),
         body: JSON.stringify(corpo),
       })
 
@@ -158,23 +146,17 @@ export default function Usuarios() {
         return
       }
 
-      const usuarioSalvo: Usuario = await res.json()
-
-      if (ehEdicao) {
-        setUsuarios((prev) =>
-          prev.map((u) => (u.id === usuarioSalvo.id ? usuarioSalvo : u))
-        )
-      } else {
-        setUsuarios((prev) => [...prev, usuarioSalvo])
-      }
-
+      // revalida o cache do SWR — a lista reflete o estado real do banco
+      mutate()
       fecharModal()
     } catch {
       alert('Falha de conexao ao salvar usuario.')
     } finally {
-      setCarregando(false)
+      setSalvando(false)
     }
   }
+
+  const bloqueado = salvando || isLoading
 
   return (
     <div className="p-8">
@@ -186,7 +168,7 @@ export default function Usuarios() {
         </div>
         <button
           onClick={abrirModalNovo}
-          disabled={carregando}
+          disabled={bloqueado}
           className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold px-4 py-2 rounded-lg"
         >
           Novo Usuario
@@ -205,7 +187,7 @@ export default function Usuarios() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {carregando && usuarios.length === 0 ? (
+            {isLoading && usuarios.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-5 py-6 text-center text-sm text-gray-400">
                   Carregando...
@@ -221,14 +203,14 @@ export default function Usuarios() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEditar(u)}
-                        disabled={carregando}
+                        disabled={bloqueado}
                         className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-semibold px-3 py-1.5 rounded"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => handleExcluir(u.id)}
-                        disabled={carregando}
+                        disabled={bloqueado}
                         className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-semibold px-3 py-1.5 rounded"
                       >
                         Excluir
@@ -312,17 +294,17 @@ export default function Usuarios() {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={fecharModal}
-                disabled={carregando}
+                disabled={salvando}
                 className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={salvar}
-                disabled={carregando}
+                disabled={salvando}
                 className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg"
               >
-                {carregando ? 'Salvando...' : 'Salvar'}
+                {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
           </div>
