@@ -1,0 +1,11 @@
+# Dependencias
+node_modules/
+
+# Chaves e Segredos (MUITO IMPORTANTE)
+.env
+.env.*
+
+# Build e Logs
+dist/
+build/
+npm-debug.log*

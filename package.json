@@ -1,0 +1,14 @@
+{
+"name": "lb-logistica-ecossistema",
+"version": "1.0.0",
+"private": true,
+"workspaces": [
+"apps/",
+"packages/"
+],
+"scripts": {
+"dev:api": "npm run dev --workspace=apps/backend-api",
+"dev:web": "npm run dev --workspace=apps/web-dashboard",
+"dev:mobile": "npm run start --workspace=apps/mobile-app"
+}
+}
