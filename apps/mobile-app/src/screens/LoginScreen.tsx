@@ -1,5 +1,3 @@
-// LoginScreen.tsx
-// tela de login conectada na API real com JWT
 
 import React, { useState } from 'react';
 import {
@@ -19,7 +17,7 @@ import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
-// troca pelo IP da maquina na rede local (nao funciona com localhost no celular fisico)
+// url da api — definir IP correto para dispositivo fisico
 const API_URL = 'http://SEU_IP_LOCAL:3333/api/auth/login';
 
 export default function LoginScreen({ navigation }: Props) {
@@ -27,7 +25,6 @@ export default function LoginScreen({ navigation }: Props) {
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  // bate na api pra logar e guarda o token no cofre do celular
   const handleEntrar = async () => {
     if (!username.trim() || !senha.trim()) {
       Alert.alert('Campos obrigatorios', 'Preencha o usuario e a senha.');
@@ -50,10 +47,8 @@ export default function LoginScreen({ navigation }: Props) {
         return;
       }
 
-      // guarda o token no cofre do celular
       await SecureStore.setItemAsync('token', data.token);
 
-      // navega pro checkin passando dados do usuario logado
       navigation.navigate('Checkin', {
         userId: data.id ?? username,
         clientId: 'cliente-contabilidade-alpha',
@@ -77,7 +72,6 @@ export default function LoginScreen({ navigation }: Props) {
         <Text style={styles.titulo}>Painel do Agente</Text>
         <Text style={styles.subtitulo}>Acesso restrito a colaboradores cadastrados</Text>
 
-        {/* campo de usuario */}
         <Text style={styles.label}>Usuario</Text>
         <TextInput
           style={styles.input}
@@ -90,7 +84,6 @@ export default function LoginScreen({ navigation }: Props) {
           editable={!carregando}
         />
 
-        {/* campo de senha */}
         <Text style={styles.label}>Senha</Text>
         <TextInput
           style={styles.input}
@@ -122,7 +115,7 @@ export default function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // gray-50 do tailwind
+    backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
@@ -147,7 +140,7 @@ const styles = StyleSheet.create({
   titulo: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#0F172A', // slate-900 do tailwind
+    color: '#0F172A',
     marginBottom: 4,
   },
   subtitulo: {
@@ -173,7 +166,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   botao: {
-    backgroundColor: '#2563EB', // blue-600 do tailwind
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',

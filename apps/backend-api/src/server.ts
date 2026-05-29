@@ -18,8 +18,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/checkin', checkinRoutes);
 
 app.get('/ping', async (req, res) => {
-  const usersCount = await prisma.user.count();
-  return res.json({ status: 'ok', totalUsuarios: usersCount });
+  try {
+    const usersCount = await prisma.user.count();
+    return res.json({ status: 'ok', totalUsuarios: usersCount });
+  } catch (error) {
+    console.error('[GET /ping]', error);
+    return res.status(500).json({ error: 'erro interno no ping' });
+  }
 });
 
 app.get('/visitas', async (req, res) => {
@@ -42,7 +47,7 @@ app.get('/visitas', async (req, res) => {
 app.get('/clientes', async (req, res) => {
   try {
     const clientes = await prisma.client.findMany({
-      select: { id: true, name: true, latitude: true, longitude: true },
+      select: { id: true, name: true, latitude: true, longitude: true, statusOperacional: true },
       orderBy: { createdAt: 'asc' },
     });
     return res.json(clientes);
@@ -142,7 +147,7 @@ app.delete('/clientes/:id', async (req, res) => {
 
 app.post('/checkin', async (req, res) => {
   try {
-    const { userId, clientId, capturedLat, capturedLng, gpsAccuracy, isMocked } = req.body;
+    const { userId, clientId, capturedLat, capturedLng, gpsAccuracy, isMocked, statusOperacional } = req.body;
 
     // rejeita gps simulado ou precisao ruim
     if (isMocked || gpsAccuracy > 50) {
@@ -179,6 +184,14 @@ app.post('/checkin', async (req, res) => {
         deviceTimestamp: new Date(),
       }
     });
+
+    // define status operacional no banco
+    if (statusOperacional) {
+      await prisma.client.update({
+        where: { id: clientId },
+        data: { statusOperacional }
+      });
+    }
 
     return res.json({
       mensagem: statusCheckin === 'VALIDO' ? 'Check-in realizado com sucesso' : 'Você está fora do raio permitido',

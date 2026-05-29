@@ -1,9 +1,3 @@
-// App.tsx
-// Ponto de entrada do aplicativo.
-//
-// Hierarquia de providers:
-//   NavigationContainer  — contexto de navegacao do React Navigation
-//     Stack.Navigator    — pilha de telas tipada
 
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -13,7 +7,6 @@ import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './src/screens/LoginScreen';
 import CheckinScreen from './src/screens/CheckinScreen';
 
-// Tipagem centralizada das rotas, exportada para uso nas props de cada tela.
 export type RootStackParamList = {
   Login: undefined;
   Checkin: {
@@ -44,7 +37,7 @@ export default function App() {
           options={{ title: 'Acesso ao Sistema' }}
         />
 
-        {/* Header ocultado na tela de Checkin: o MapView ocupa a tela inteira. */}
+        {/* header ocultado na tela de checkin: mapview ocupa tela inteira */}
         <Stack.Screen
           name="Checkin"
           component={CheckinScreen}

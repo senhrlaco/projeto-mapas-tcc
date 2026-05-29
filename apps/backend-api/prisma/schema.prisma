@@ -39,9 +39,10 @@ model Client {
   id        String   @id @default(uuid())
   name      String
   address   String
-  latitude  Float
-  longitude Float
-  createdAt DateTime @default(now())
+  latitude          Float
+  longitude         Float
+  statusOperacional String   @default("PENDENTE")
+  createdAt         DateTime @default(now())
 
   visits    Visit[]
 

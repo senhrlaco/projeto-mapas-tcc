@@ -1,14 +1,3 @@
-// src/screens/CheckinScreen.tsx
-//
-// Tela de check-in de campo para equipe de certificacao digital.
-//
-// Responsabilidades:
-//   - Gaveta nativa com fisica de PanResponder (snap: ABERTA / RECOLHIDA)
-//   - GPS orientado a eventos (single-shot, sem rastreamento continuo)
-//   - Deteccao de GPS simulado (isMocked) com bloqueio de check-in
-//   - Validacao Haversine client-side: "Confirmar Chegada" so habilitado <= 100 m
-//   - Payload tipado pronto para POST na API Node.js / Java com validacao Mapbox
-//   - Abertura de navegacao via deep link com fallback para URL web
 
 import React, {
   useState,
@@ -41,8 +30,7 @@ import { RootStackParamList } from '../../App';
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkin'>;
 
 // ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
+
 
 type ClienteAtendimento = {
   id: string;
@@ -61,48 +49,46 @@ type EstadoGps =
   | 'erro';
 
 type OpcaoRelatorio =
-  | 'token_entregue'
-  | 'cliente_nao_atendeu'
-  | 'videoconferencia_realizada'
-  | 'pendente'
-  | 'faltou_documentacao';
+  | 'VISITA_REALIZADA'
+  | 'ENTREGA_REALIZADA'
+  | 'TOKEN_ENTREGUE'
+  | 'FALTA_DOCUMENTOS';
 
-// Payload enviado ao back-end no momento do registro de visita.
+// payload enviado ao back-end no registro de visita
 type PayloadCheckin = {
-  colaborador_id: string;
-  cliente_id: string;
-  coordenadas: { lat: number; lng: number };
+  userId: string;
+  clientId: string;
+  capturedLat: number;
+  capturedLng: number;
+  gpsAccuracy: number;
   isMocked: boolean;
-  status: OpcaoRelatorio;
-  timestamp: string;
+  statusOperacional: string;
 };
 
 // ---------------------------------------------------------------------------
-// Constantes de layout da gaveta
-// ---------------------------------------------------------------------------
+
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Altura total da gaveta. Deve coincidir com a propriedade 'height' no StyleSheet.
+// altura total da gaveta — deve coincidir com a propriedade height no stylesheet
 const GAVETA_ALTURA = SCREEN_HEIGHT * 0.58;
 
-// Altura do cabecalho visivel quando a gaveta esta recolhida:
+// altura do cabecalho visivel quando a gaveta esta recolhida:
 // alca (24px) + cabecalho badge+nome (44px) + margem (12px) = 80px
 const CABECALHO_VISIVEL = 80;
 
-// Posicoes de translacao vertical (translateY) para cada estado da gaveta.
+// posicoes de translacao vertical (translateY) para cada estado da gaveta
 const SNAP = {
-  ABERTA:    0,                               // gaveta totalmente visivel
+  ABERTA: 0,                               // gaveta totalmente visivel
   RECOLHIDA: GAVETA_ALTURA - CABECALHO_VISIVEL, // apenas o topo aparece
 } as const;
 
-// Limiares para decisao de snap ao soltar o dedo.
-const LIMIAR_DRAG_PX     = 60;
-const LIMIAR_VELOCIDADE  = 0.5;
+// limiares para decisao de snap ao soltar o dedo
+const LIMIAR_DRAG_PX = 60;
+const LIMIAR_VELOCIDADE = 0.5;
 
 // ---------------------------------------------------------------------------
-// Dados estaticos dos clientes (substituir por chamada de API)
-// ---------------------------------------------------------------------------
+
 
 const CLIENTES: ClienteAtendimento[] = [
   {
@@ -126,49 +112,41 @@ const CLIENTES: ClienteAtendimento[] = [
 const RAIO_GEOFENCE_METROS = 100;
 
 const REGIAO_INICIAL: Region = {
-  latitude:  (CLIENTES[0].latitude  + CLIENTES[1].latitude)  / 2,
+  latitude: (CLIENTES[0].latitude + CLIENTES[1].latitude) / 2,
   longitude: (CLIENTES[0].longitude + CLIENTES[1].longitude) / 2,
-  latitudeDelta:  0.05,
+  latitudeDelta: 0.05,
   longitudeDelta: 0.12,
 };
 
 const ROTULOS_RELATORIO: Record<OpcaoRelatorio, string> = {
-  token_entregue:            'Token entregue',
-  cliente_nao_atendeu:       'Cliente nao atendeu',
-  videoconferencia_realizada: 'Videoconferencia realizada',
-  pendente:                  'Pendente',
-  faltou_documentacao:       'Faltou documentacao',
+  VISITA_REALIZADA: 'Visita Realizada',
+  ENTREGA_REALIZADA: 'Entrega Realizada',
+  TOKEN_ENTREGUE: 'Token Entregue',
+  FALTA_DOCUMENTOS: 'Falta de Documentos',
 };
 
 const COR_RELATORIO: Record<OpcaoRelatorio, string> = {
-  token_entregue:            '#16a34a',
-  videoconferencia_realizada: '#1d4ed8',
-  cliente_nao_atendeu:       '#dc2626',
-  faltou_documentacao:       '#ea580c',
-  pendente:                  '#78716c',
+  VISITA_REALIZADA: '#16a34a',
+  ENTREGA_REALIZADA: '#16a34a',
+  TOKEN_ENTREGUE: '#1d4ed8',
+  FALTA_DOCUMENTOS: '#dc2626',
 };
 
 const OPCOES_RELATORIO: OpcaoRelatorio[] = [
-  'token_entregue',
-  'videoconferencia_realizada',
-  'cliente_nao_atendeu',
-  'faltou_documentacao',
-  'pendente',
+  'VISITA_REALIZADA',
+  'ENTREGA_REALIZADA',
+  'TOKEN_ENTREGUE',
+  'FALTA_DOCUMENTOS',
 ];
 
 // ---------------------------------------------------------------------------
-// Utilitarios
-// ---------------------------------------------------------------------------
 
-/**
- * Calcula a distancia em metros entre dois pontos geograficos.
- * Formula: Haversine sobre esfera com raio medio da Terra (6 371 000 m).
- */
+
 function haversineMetros(
   lat1: number, lng1: number,
   lat2: number, lng2: number,
 ): number {
-  const R   = 6_371_000;
+  const R = 6_371_000;
   const rad = (d: number) => (d * Math.PI) / 180;
   const dLat = rad(lat2 - lat1);
   const dLng = rad(lng2 - lng1);
@@ -178,65 +156,54 @@ function haversineMetros(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * Detecta uso de GPS simulado (fake GPS / location spoofer).
- *
- * Android: o sistema operacional popula o campo `mocked` no objeto LocationObject.
- * iOS: nao existe flag nativa equivalente; heuristica: accuracy === 0 indica simulacao
- *      (dispositivos fisicos nunca retornam precisao exatamente zero).
- */
+// detecta uso de gps simulado
+// android: campo mocked do LocationObject; ios: accuracy === 0 indica simulacao
 function detectarGpsFake(posicao: Location.LocationObject): boolean {
   if (typeof posicao.mocked === 'boolean') return posicao.mocked;
   return posicao.coords.accuracy === 0;
 }
 
 // ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
+
 
 export default function CheckinScreen({ route }: Props) {
   const { userId } = route.params;
 
-  // ------ Estado GPS ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   const [posicaoUsuario, setPosicaoUsuario] = useState<Location.LocationObject | null>(null);
-  const [estadoGps, setEstadoGps]           = useState<EstadoGps>('solicitando_permissao');
-  const [gpsIsMocked, setGpsIsMocked]       = useState<boolean>(false);
+  const [estadoGps, setEstadoGps] = useState<EstadoGps>('solicitando_permissao');
+  const [gpsIsMocked, setGpsIsMocked] = useState<boolean>(false);
 
-  // ------ Estado de negocio ------------------------------------------------------------------------------------------------------------------------------------------------------
 
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteAtendimento>(CLIENTES[0]);
   const [atendimentoIniciado, setAtendimentoIniciado] = useState<boolean>(false);
-  const [statusRelatorio, setStatusRelatorio]         = useState<OpcaoRelatorio | null>(null);
+  const [statusRelatorio, setStatusRelatorio] = useState<OpcaoRelatorio | null>(null);
 
-  // ------ Animacao da gaveta ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-  // slideAnim: valor de translateY da gaveta.
-  // Inicializado em GAVETA_ALTURA (off-screen abaixo) e animado para SNAP.ABERTA na montagem.
-  const slideAnim       = useRef(new Animated.Value(GAVETA_ALTURA)).current;
+  // slideAnim: translateY da gaveta — parte fora da tela e anima para SNAP.ABERTA
+  const slideAnim = useRef(new Animated.Value(GAVETA_ALTURA)).current;
 
-  // posicaoAtualRef: armazena o ultimo snap confirmado para calculo relativo durante gesto.
+  // posicaoAtualRef: ultimo snap confirmado para calculo relativo durante gesto
   const posicaoAtualRef = useRef<number>(SNAP.ABERTA);
 
-  // ------ PanResponder ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   const panResponder = useRef(
     PanResponder.create({
-      // Intercepta o gesto apenas se o movimento for predominantemente vertical.
+      // intercepta o gesto apenas se o movimento for predominantemente vertical
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  (_, g) => Math.abs(g.dy) > Math.abs(g.dx) + 4,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > Math.abs(g.dx) + 4,
 
       onPanResponderGrant: () => {
-        // Congela o valor animado atual como ponto de referencia do gesto em curso.
-        // stopAnimation fornece o valor instantaneo, evitando salto visual.
+        // congela o valor animado atual como ponto de referencia do gesto
+        // stopAnimation fornece o valor instantaneo, evitando salto visual
         slideAnim.stopAnimation((val) => {
           posicaoAtualRef.current = val;
         });
       },
 
       onPanResponderMove: (_, g) => {
-        // Translacao relativa: posicao de referencia + deslocamento do dedo.
-        // Clamped dentro dos limites validos para nao sair da faixa de snap.
+        // translacao relativa: posicao de referencia + deslocamento do dedo
+        // clamped dentro dos limites validos
         const novoY = Math.min(
           SNAP.RECOLHIDA,
           Math.max(SNAP.ABERTA, posicaoAtualRef.current + g.dy),
@@ -245,14 +212,13 @@ export default function CheckinScreen({ route }: Props) {
       },
 
       onPanResponderRelease: (_, g) => {
-        // Decide o snap destino com base no deslocamento acumulado (dy) e velocidade (vy).
-        // Arrastar para baixo com distancia ou velocidade suficiente recolhe a gaveta.
+        // decide o snap destino com base no deslocamento (dy) e velocidade (vy)
         const arrastarBaixo = g.dy > LIMIAR_DRAG_PX || g.vy > LIMIAR_VELOCIDADE;
         const targetY = arrastarBaixo ? SNAP.RECOLHIDA : SNAP.ABERTA;
 
         posicaoAtualRef.current = targetY;
 
-        // Animated.spring com bounciness moderado: fisica natural sem exagero.
+        // spring com bounciness moderado: fisica natural sem exagero
         Animated.spring(slideAnim, {
           toValue: targetY,
           useNativeDriver: true,
@@ -262,7 +228,7 @@ export default function CheckinScreen({ route }: Props) {
       },
 
       onPanResponderTerminate: () => {
-        // Gesto cancelado pelo sistema (ex: notificacao do SO): restaura posicao atual.
+        // gesto cancelado pelo sistema: restaura posicao atual
         Animated.spring(slideAnim, {
           toValue: posicaoAtualRef.current,
           useNativeDriver: true,
@@ -273,15 +239,9 @@ export default function CheckinScreen({ route }: Props) {
     })
   ).current;
 
-  // ------ GPS: captura orientada a eventos ---------------------------------------------------------------------------------------------------------
 
-  /**
-   * Captura a posicao atual do dispositivo em alta precisao (single-shot).
-   *
-   * Design decision: sem rastreamento continuo (watchPositionAsync),
-   * conforme requisito de otimizacao de bateria do projeto.
-   * Chamada ao focar na tela e via botao de atualizacao manual no mapa.
-   */
+  // captura posicao atual em alta precisao (single-shot)
+  // sem rastreamento continuo para preservar bateria
   const capturarLocalizacaoAtual = useCallback(async (): Promise<void> => {
     setEstadoGps('solicitando_permissao');
 
@@ -306,14 +266,12 @@ export default function CheckinScreen({ route }: Props) {
     }
   }, []);
 
-  // Captura GPS ao focar na tela (primeiro carregamento e retorno de navegacao).
   useFocusEffect(
     useCallback(() => {
       capturarLocalizacaoAtual();
     }, [capturarLocalizacaoAtual]),
   );
 
-  // Animacao de entrada da gaveta ao montar o componente.
   useEffect(() => {
     Animated.timing(slideAnim, {
       toValue: SNAP.ABERTA,
@@ -322,54 +280,45 @@ export default function CheckinScreen({ route }: Props) {
     }).start();
   }, [slideAnim]);
 
-  // ------ Metricas derivadas ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-  // Distancia em metros entre o usuario e o cliente selecionado.
   const distanciaMetros: number | null =
     posicaoUsuario !== null
       ? haversineMetros(
-          posicaoUsuario.coords.latitude,
-          posicaoUsuario.coords.longitude,
-          clienteSelecionado.latitude,
-          clienteSelecionado.longitude,
-        )
+        posicaoUsuario.coords.latitude,
+        posicaoUsuario.coords.longitude,
+        clienteSelecionado.latitude,
+        clienteSelecionado.longitude,
+      )
       : null;
 
-  // Determina se o operador esta dentro da geofence do cliente selecionado.
   const dentroGeofence = distanciaMetros !== null && distanciaMetros <= RAIO_GEOFENCE_METROS;
 
-  // ------ Payload e envio ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  // Estado de carregamento do envio para desabilitar o botao durante a requisicao.
   const [enviando, setEnviando] = useState<boolean>(false);
 
-  /**
-   * Monta o payload no formato exato do schema Prisma e envia via POST para a API.
-   *
-   * Fluxo:
-   *   - HTTP 201: check-in registrado com sucesso -> Alert + gaveta recolhida.
-   *   - HTTP 403: fraude de GPS detectada pelo servidor -> Alert com mensagem do servidor.
-   *   - Outros erros HTTP ou falha de rede -> Alert generico de erro de conexao.
-   */
+  // monta o payload no schema prisma e envia via post para a api
+  // 201: sucesso; 403: fraude detectada; outros: erro de conexao
   async function enviarCheckin(statusVisita: OpcaoRelatorio): Promise<void> {
     if (!posicaoUsuario) return;
 
-    const body = {
-      colaboradorId: 'colab-lucas-001',
-      clienteId:     'cliente-contabilidade-alpha',
-      latitude:      posicaoUsuario.coords.latitude,
-      longitude:     posicaoUsuario.coords.longitude,
-      isMocked:      gpsIsMocked,
-      status:        statusVisita,
+    // alinhamento de contrato payload
+    const body: PayloadCheckin = {
+      userId: 'colab-lucas-001',
+      clientId: clienteSelecionado.id,
+      capturedLat: posicaoUsuario.coords.latitude,
+      capturedLng: posicaoUsuario.coords.longitude,
+      gpsAccuracy: posicaoUsuario.coords.accuracy ?? 10,
+      isMocked: gpsIsMocked,
+      statusOperacional: statusVisita,
     };
 
     setEnviando(true);
 
     try {
       const resposta = await fetch('http://192.168.1.10:3333/api/checkin', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
+        body: JSON.stringify(body),
       });
 
       const dados = await resposta.json();
@@ -381,25 +330,26 @@ export default function CheckinScreen({ route }: Props) {
           [{ text: 'OK' }],
         );
 
-        // Recolhe a gaveta apos o registro bem-sucedido.
+        // recolhe a gaveta apos registro bem-sucedido
         posicaoAtualRef.current = SNAP.RECOLHIDA;
         Animated.spring(slideAnim, {
-          toValue:     SNAP.RECOLHIDA,
+          toValue: SNAP.RECOLHIDA,
           useNativeDriver: true,
-          bounciness:  4,
-          speed:       14,
+          bounciness: 4,
+          speed: 14,
         }).start();
         return;
       }
 
-      // Erros retornados pela API (403 fraude, 400 validacao, etc.).
+      // erros retornados pela api (403 fraude, 400 validacao etc)
       const mensagemServidor: string =
         dados?.error ?? `Erro ${resposta.status}: tente novamente.`;
 
       Alert.alert('Falha no Check-in', mensagemServidor, [{ text: 'OK' }]);
 
     } catch {
-      // Falha de rede ou servidor inacessivel.
+      // tratamento de erro nativo
+      // falha de rede ou servidor inacessivel
       Alert.alert(
         'Erro de Conexao',
         'Nao foi possivel conectar ao servidor. Verifique sua rede e tente novamente.',
@@ -410,7 +360,6 @@ export default function CheckinScreen({ route }: Props) {
     }
   }
 
-  // ------ Handlers ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   function selecionarCliente(cliente: ClienteAtendimento): void {
     if (cliente.id !== clienteSelecionado.id) {
@@ -483,20 +432,18 @@ export default function CheckinScreen({ route }: Props) {
     );
   }
 
-  // ------ Render helpers ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // ------ render helpers
 
-  /**
-   * Indicador de status do GPS sobreposto ao mapa.
-   * Retorna null quando a localizacao esta disponivel (sem poluicao visual).
-   */
+  // indicador de status do gps sobreposto ao mapa
+  // retorna null quando a localizacao esta disponivel
   function renderIndicadorGps(): React.ReactNode {
     if (estadoGps === 'disponivel') return null;
 
     const mensagens: Record<Exclude<EstadoGps, 'disponivel'>, string> = {
       solicitando_permissao: 'Solicitando permissao de localizacao...',
-      capturando:            'Capturando posicao GPS...',
-      sem_permissao:         'Permissao de localizacao negada.',
-      erro:                  'Nao foi possivel obter a localizacao.',
+      capturando: 'Capturando posicao GPS...',
+      sem_permissao: 'Permissao de localizacao negada.',
+      erro: 'Nao foi possivel obter a localizacao.',
     };
 
     const emAndamento =
@@ -512,16 +459,10 @@ export default function CheckinScreen({ route }: Props) {
     );
   }
 
-  /**
-   * Secao de acoes da gaveta. Transiciona entre tres estados:
-   *
-   *   Estado A --- relatorio registrado: exibe o status selecionado (tela final).
-   *   Estado B --- atendimento nao iniciado: botao "Confirmar Chegada",
-   *              habilitado somente se dentroGeofence && !gpsIsMocked.
-   *   Estado C --- atendimento iniciado: lista de 5 opcoes de relatorio.
-   */
+  // secao de acoes da gaveta com tres estados:
+  // A: relatorio registrado, B: aguardando chegada, C: atendimento em curso
   function renderAcoesAtendimento(): React.ReactNode {
-    // Estado A: relatorio ja registrado.
+    // Estado A: relatorio ja registrado
     if (statusRelatorio !== null) {
       return (
         <View style={styles.relatorioRegistrado}>
@@ -533,11 +474,11 @@ export default function CheckinScreen({ route }: Props) {
       );
     }
 
-    // Estado B: aguardando confirmacao de chegada.
+    // Estado B: aguardando confirmacao de chegada
     if (!atendimentoIniciado) {
       const habilitado = dentroGeofence && !gpsIsMocked;
 
-      // Texto do botao e contextual ao motivo de bloqueio.
+      // texto do botao e contextual ao motivo de bloqueio
       let textoBotao: string;
       if (gpsIsMocked) {
         textoBotao = 'Check-in Bloqueado: Emulador de GPS Detectado';
@@ -572,7 +513,7 @@ export default function CheckinScreen({ route }: Props) {
       );
     }
 
-    // Estado C: atendimento em curso, exibir opcoes de relatorio.
+    // Estado C: atendimento em curso, exibir opcoes de relatorio
     return (
       <View style={styles.relatorioContainer}>
         <Text style={styles.relatorioTitulo}>Resultado do atendimento</Text>
@@ -595,24 +536,24 @@ export default function CheckinScreen({ route }: Props) {
     );
   }
 
-  // ------ JSX principal ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // ------ jsx principal
 
   const coordUsuario =
     posicaoUsuario !== null
       ? {
-          latitude:  posicaoUsuario.coords.latitude,
-          longitude: posicaoUsuario.coords.longitude,
-        }
+        latitude: posicaoUsuario.coords.latitude,
+        longitude: posicaoUsuario.coords.longitude,
+      }
       : null;
 
   return (
     <View style={styles.container}>
 
       {/*
-        MapView: camada de fundo, preenche todo o container (flex: 1).
-        A gaveta e sobreposta via Animated.View com position: 'absolute'.
-        PROVIDER_GOOGLE: obrigatorio no Android para tiles consistentes.
-        Em producao: registrar a Google Maps API Key em app.json.
+        mapview: camada de fundo que preenche o container (flex: 1)
+        gaveta sobreposta via animated.view com position: absolute
+        provider_google: obrigatorio no android para tiles consistentes
+        em producao: registrar a google maps api key em app.json
       */}
       <MapView
         style={styles.mapa}
@@ -624,8 +565,8 @@ export default function CheckinScreen({ route }: Props) {
         toolbarEnabled={false}
       >
         {/*
-          Marcador do operador: renderizado apenas quando o GPS esta disponivel.
-          Cor vermelha indica GPS simulado detectado; azul indica localizacao real.
+          marcador do operador: exibido apenas quando o gps esta disponivel
+          vermelho indica gps simulado; azul indica localizacao real
         */}
         {coordUsuario !== null && (
           <Marker
@@ -641,10 +582,9 @@ export default function CheckinScreen({ route }: Props) {
         )}
 
         {/*
-          Marcadores e geofences dos clientes da ordem de servico.
-          Cliente selecionado: marcador verde + geofence com opacidade maior.
-          Cliente nao selecionado: marcador cinza + geofence com opacidade reduzida.
-          onPress seleciona o cliente e atualiza a gaveta.
+          marcadores e geofences dos clientes da ordem de servico
+          selecionado: marcador verde + geofence com opacidade maior
+          nao selecionado: marcador cinza + geofence com opacidade reduzida
         */}
         {CLIENTES.map((cliente) => {
           const selecionado = cliente.id === clienteSelecionado.id;
@@ -677,13 +617,12 @@ export default function CheckinScreen({ route }: Props) {
         })}
       </MapView>
 
-      {/* Indicador de status do GPS: visivel apenas enquanto nao disponivel. */}
+      {/* indicador de status do gps */}
       {renderIndicadorGps()}
 
       {/*
-        Botao de atualizacao manual do GPS.
-        Posicionado no canto superior direito do mapa.
-        Permite ao operador refrescar a coordenada sem sair da tela.
+        botao de atualizacao manual do gps — canto superior direito do mapa
+        permite refrescar a coordenada sem sair da tela
       */}
       <TouchableOpacity
         style={styles.botaoAtualizarGps}
@@ -699,14 +638,9 @@ export default function CheckinScreen({ route }: Props) {
       </TouchableOpacity>
 
       {/*
-        Animated.View da gaveta: sobreposta ao mapa via position: 'absolute'.
-
-        pointerEvents="box-none": toques na area transparente acima da gaveta
-        (visivel quando recolhida) passam para o MapView subjacente.
-        Os filhos com pointerEvents="auto" continuam recebendo toques normalmente.
-
-        Os handlers do PanResponder sao aplicados APENAS na alca de arrasto,
-        evitando conflito com o ScrollView interno e com o MapView.
+        animated.view da gaveta: sobreposta ao mapa via position: absolute
+        pointersevents box-none: toques na area transparente passam para o mapview
+        panresponder aplicado apenas na alca de arrasto
       */}
       <Animated.View
         style={[styles.gaveta, { transform: [{ translateY: slideAnim }] }]}
@@ -714,7 +648,7 @@ export default function CheckinScreen({ route }: Props) {
       >
         <SafeAreaView pointerEvents="box-none">
 
-          {/* Alca de arrasto: unica area que intercepta os gestos do PanResponder. */}
+          {/* alca de arrasto: unica area que intercepta os gestos do panresponder */}
           <View
             style={styles.alcaContainer}
             pointerEvents="auto"
@@ -723,10 +657,10 @@ export default function CheckinScreen({ route }: Props) {
             <View style={styles.alca} />
           </View>
 
-          {/* Conteudo da gaveta: recebe toques independentemente do PanResponder. */}
+          {/* conteudo da gaveta */}
           <View pointerEvents="auto">
 
-            {/* Cabecalho: badge de status operacional e nome do cliente selecionado. */}
+            {/* cabecalho: badge de status e nome do cliente selecionado */}
             <View style={styles.cabecalho}>
               <View style={[styles.badgeStatus, gpsIsMocked && styles.badgeStatusFraude]}>
                 <Text style={[styles.badgeStatusTexto, gpsIsMocked && styles.badgeStatusTextoFraude]}>
@@ -744,7 +678,7 @@ export default function CheckinScreen({ route }: Props) {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Alerta de fraude: exibido quando GPS simulado e detectado. */}
+              {/* alerta de fraude: exibido quando gps simulado e detectado */}
               {gpsIsMocked && (
                 <View style={styles.alertaFraude}>
                   <Text style={styles.alertaFraudeTexto}>
@@ -754,7 +688,7 @@ export default function CheckinScreen({ route }: Props) {
                 </View>
               )}
 
-              {/* Informacoes do cliente selecionado. */}
+              {/* informacoes do cliente selecionado */}
               <View style={styles.blocoInfo}>
 
                 <View style={styles.linhaInfo}>
@@ -778,7 +712,7 @@ export default function CheckinScreen({ route }: Props) {
                     style={[
                       styles.linhaInfoValor,
                       distanciaMetros === null && styles.valorPendente,
-                      // Destaca em verde quando dentro da geofence.
+                      // destaque em verde quando dentro da geofence
                       dentroGeofence && styles.valorDentroGeofence,
                     ]}
                   >
@@ -804,7 +738,7 @@ export default function CheckinScreen({ route }: Props) {
 
               </View>
 
-              {/* Botao de navegacao externa com selecao de app via Alert nativo. */}
+              {/* botao de navegacao externa com selecao de app via alert nativo */}
               <TouchableOpacity
                 style={styles.botaoNavegar}
                 activeOpacity={0.8}
@@ -813,10 +747,10 @@ export default function CheckinScreen({ route }: Props) {
                 <Text style={styles.botaoNavegarTexto}>Navegar</Text>
               </TouchableOpacity>
 
-              {/* Secao de acoes: varia conforme o estado do fluxo de atendimento. */}
+              {/* secao de acoes da gaveta */}
               {renderAcoesAtendimento()}
 
-              {/* Troca rapida de cliente na rota. */}
+              {/* troca rapida de cliente na rota */}
               {CLIENTES.filter((c) => c.id !== clienteSelecionado.id).length > 0 && (
                 <>
                   <Text style={styles.seletorTitulo}>Outros clientes na rota</Text>
@@ -846,7 +780,7 @@ export default function CheckinScreen({ route }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Estilos
+// estilos
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
@@ -856,17 +790,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
 
-  // Mapa em tela cheia. A gaveta e sobreposta via Animated.View absoluta.
+  // mapa em tela cheia — gaveta sobreposta via animated.view absoluta
   mapa: {
     flex: 1,
   },
 
-  // Indicador de GPS: posicionado no topo esquerdo, reservando espaco para o botao GPS.
+  // indicador de gps: topo esquerdo, com margem para o botao de atualizar gps
   indicadorGps: {
     position: 'absolute',
     top: 16,
     left: 16,
-    right: 120, // margem para o botao "Atualizar GPS" no canto direito
+    right: 120, // margem para o botao atualizar gps
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderRadius: 10,
     paddingHorizontal: 14,
@@ -891,7 +825,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Botao de atualizacao manual do GPS: canto superior direito do mapa.
+  // botao de atualizacao manual do gps: canto superior direito
   botaoAtualizarGps: {
     position: 'absolute',
     top: 16,
@@ -915,8 +849,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Gaveta: Animated.View absoluta no rodape, altura fixa para calculo de snap.
-  // zIndex garante posicionamento acima do MapView e do indicador de GPS.
+  // gaveta: animated.view absoluta no rodape, altura fixa para calculo de snap
   gaveta: {
     position: 'absolute',
     bottom: 0,
@@ -936,7 +869,7 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
 
-  // Alca de arrasto: area que recebe os handlers do PanResponder.
+  // alca de arrasto: area que recebe os handlers do panresponder
   alcaContainer: {
     alignItems: 'center',
     paddingTop: 10,
@@ -992,7 +925,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  // Alerta de fraude: exibido quando GPS simulado e detectado.
+  // alerta de fraude: exibido quando gps simulado e detectado
   alertaFraude: {
     backgroundColor: '#fef2f2',
     borderRadius: 8,
@@ -1043,7 +976,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Destaque verde para distancia dentro da geofence.
+  // destaque verde para distancia dentro da geofence
   valorDentroGeofence: {
     color: '#16a34a',
     fontWeight: '700',
@@ -1070,7 +1003,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // Botao "Confirmar Chegada": azul quando habilitado, cinza quando bloqueado.
+  // botao confirmar chegada: azul quando habilitado, cinza quando bloqueado
   botaoConfirmarChegada: {
     backgroundColor: '#1d4ed8',
     borderRadius: 12,
@@ -1099,7 +1032,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Texto menor para mensagens de bloqueio que sao mais longas.
+  // texto menor para mensagens de bloqueio mais longas
   botaoPrincipalTextoDesabilitado: {
     fontSize: 12,
     fontWeight: '600',
@@ -1134,7 +1067,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
 
-  // Card exibido apos o registro do relatorio (estado final da tela).
+  // card exibido apos o registro do relatorio (estado final da tela)
   relatorioRegistrado: {
     backgroundColor: '#f8fafc',
     borderRadius: 10,

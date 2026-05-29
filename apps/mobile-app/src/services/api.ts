@@ -1,24 +1,25 @@
-// src/services/api.ts
-// Configuração central do Axios — toda chamada de API passa por aqui
-
 import axios from 'axios';
+import Constants from 'expo-constants';
 
-// Em dev, aponta pro localhost. Em produção trocar pela URL real.
-// No Android Emulator, o localhost da máquina é acessível via 10.0.2.2
-// No Expo Go com dispositivo físico, usar o IP da máquina na rede local
-const BASE_URL = 'http://10.0.2.2:3333';
+// busca ip da rede local via expo
+const hostUri = Constants.expoConfig?.hostUri;
+const localIp = hostUri ? hostUri.split(':')[0] : null;
+
+// prioridade para variavel de producao
+// fallback seguro para emulador
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (localIp ? `http://${localIp}:3333` : null) ||
+  'http://10.0.2.2:3333';
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000, // 10 segundos — suficiente pra qualquer operação normal
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// ---------- Tipos que espelham o contrato da API ----------
-
-// Payload que mandamos pro POST /checkin
 export interface CheckinPayload {
   userId: string;
   clientId: string;
@@ -26,26 +27,22 @@ export interface CheckinPayload {
   capturedLng: number;
   gpsAccuracy: number;
   isMocked: boolean;
+  statusOperacional?: string;
 }
 
-// Resposta de sucesso do POST /checkin
 export interface CheckinResponse {
   mensagem: string;
-  distancia: string;        // ex: "42 metros"
+  distancia: string;        // ex: '42 metros'
   status: 'VALIDO' | 'FORA_DA_CERCA';
   idVisita: string;
 }
 
-// Payload do POST /usuarios (usado no login/criação de conta)
 export interface LoginPayload {
   name?: string;
   email: string;
   password: string;
 }
 
-// ---------- Funções de chamada ----------
-
-// Envia o check-in com localização para o backend
 export async function realizarCheckin(payload: CheckinPayload): Promise<CheckinResponse> {
   const { data } = await api.post<CheckinResponse>('/checkin', payload);
   return data;

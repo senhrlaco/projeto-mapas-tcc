@@ -23,6 +23,7 @@ type Cliente = {
   address?: string
   latitude: number
   longitude: number
+  statusOperacional?: string
 }
 
 type MarkerSelecionado = Cliente | null
@@ -251,22 +252,42 @@ export default function Dashboard() {
                   closeOnClick={false}
                   anchor="bottom"
                 >
-                  <div className="text-sm min-w-[160px]">
-                    <p className="font-semibold text-gray-800">{selectedMarker.name}</p>
+                  <div className="text-sm min-w-[200px]">
+                    <div className="flex flex-col border-b border-gray-100 pb-2 mb-2">
+                      <p className="font-semibold text-gray-800">{selectedMarker.name}</p>
+                      {/* renderiza badge de status no mapa */}
+                      <div className="mt-1">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${
+                          selectedMarker.statusOperacional === 'FALTA_DOCUMENTOS'
+                            ? 'bg-red-100 text-red-800'
+                            : selectedMarker.statusOperacional === 'PENDENTE' || !selectedMarker.statusOperacional
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {selectedMarker.statusOperacional || 'PENDENTE'}
+                        </span>
+                      </div>
+                    </div>
                     {selectedMarker.address && (
-                      <p className="text-gray-500 text-xs mt-1">{selectedMarker.address}</p>
+                      <p className="text-gray-500 text-xs mb-3">{selectedMarker.address}</p>
                     )}
                     <button
                       onClick={async () => {
+                        const clienteParaRemover = selectedMarker.id
+                        setSelectedMarker(null)
+                        // optimistic ui: atualiza a view instantaneamente
+                        mutateClientes(clientes.filter((c) => c.id !== clienteParaRemover), false)
+                        
                         try {
-                          await fetch(`${baseURL}/clientes/${selectedMarker.id}`, {
+                          const res = await fetch(`${baseURL}/clientes/${clienteParaRemover}`, {
                             method: 'DELETE',
                             headers: headersEscrita(),
                           })
+                          if (!res.ok) throw new Error('Falha')
                           mutateClientes()
-                          setSelectedMarker(null)
                         } catch {
-                          // ignora
+                          // reverte exclusao caso backend falhe
+                          mutateClientes()
                         }
                       }}
                       className="mt-3 w-full text-xs text-red-600 hover:text-red-700 font-semibold py-1 border border-red-200 hover:bg-red-50 rounded"
@@ -299,8 +320,9 @@ export default function Dashboard() {
             <tbody className="divide-y divide-gray-100">
               {visitas.map((v) => (
                 <tr key={v.id}>
-                  <td className="px-5 py-3 text-gray-800 font-medium">{v.user.name}</td>
-                  <td className="px-5 py-3 text-gray-500">{v.client.name}</td>
+                  {/* previne crash se status for nulo */}
+                  <td className="px-5 py-3 text-gray-800 font-medium">{v.user?.name || 'Sistema'}</td>
+                  <td className="px-5 py-3 text-gray-500">{v.client?.name || 'Desconhecido'}</td>
                   <td className="px-5 py-3">
                     <span className={
                       'text-xs font-semibold px-2 py-1 rounded-full ' +
