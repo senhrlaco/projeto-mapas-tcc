@@ -23,12 +23,13 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      // sanitiza usuario e envia credenciais
+      // salva o token para persistencia entre abas
       const response = await api.post('/auth/login', { login: usuario.trim(), senha })
-      const data = response.data
+      const token = response.data.token
+      localStorage.setItem('@Savez:token', token)
 
-      localStorage.setItem('@Savez:token', data.token)
-      navigate('/')
+      // forca navegacao completa para que o PrivateRoute releia o localStorage
+      window.location.href = '/'
 
     } catch {
       setErro('Nao foi possivel conectar ao servidor.')
