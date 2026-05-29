@@ -58,7 +58,19 @@ app.get('/clientes', async (req, res) => {
     return res.status(500).json({ error: 'erro ao buscar clientes' });
   }
 });
-
+// utiliza function para forcar o hoisting no typescript
+async function verificarToken(req: any, res: any, next: any) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Nao autorizado' });
+  try {
+    // valida assinatura do jwt
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Token invalido' });
+  }
+}
 app.get('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     // oculta painel para agentes
@@ -79,18 +91,18 @@ app.get('/usuarios', verificarToken, async (req: any, res: any) => {
 app.post('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     const { name, email, password, role } = req.body;
-    
+
     // bloqueia criacao de hierarquia superior
     const pesoLogado = PESOS_RBAC[req.user.role] || 0;
     const pesoAlvo = PESOS_RBAC[role] || 0;
-    
+
     if (pesoLogado <= pesoAlvo) {
       return res.status(403).json({ error: 'Privilegio insuficiente' });
     }
 
     // criptografa a senha antes de salvar no banco
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     const usuario = await prisma.usuario.create({
       data: {
         nome: name,
@@ -113,18 +125,7 @@ const PESOS_RBAC: Record<string, number> = {
   'Agente': 10,
 };
 
-// middleware para verificar o jwt
-const verificarToken = (req: any, res: any, next: any) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Nao autorizado' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Token invalido' });
-  }
-};
+
 
 app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
