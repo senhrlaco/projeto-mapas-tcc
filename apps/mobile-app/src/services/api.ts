@@ -1,16 +1,8 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 
-// busca ip da rede local via expo
-const hostUri = Constants.expoConfig?.hostUri;
-const localIp = hostUri ? hostUri.split(':')[0] : null;
-
-// prioridade para variavel de producao
-// fallback seguro para emulador
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (localIp ? `http://${localIp}:3333` : null) ||
-  'http://10.0.2.2:3333';
+// forca url literal para bypass do cache de env
+const BASE_URL = 'https://api-projeto-mapas.onrender.com/api';
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -19,6 +11,28 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+api.interceptors.request.use(
+  (config) => {
+    // rastreador de rota exata no terminal
+    console.log(`[REQ] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // extrai payload de erro do backend
+    if (error.response) {
+      console.log(`[RES_ERROR] HTTP ${error.response.status}`);
+    } else {
+      console.log(`[NET_ERROR] ${error.message}`);
+    }
+    return Promise.reject(error);
+  }
+);
 
 export interface CheckinPayload {
   userId: string;

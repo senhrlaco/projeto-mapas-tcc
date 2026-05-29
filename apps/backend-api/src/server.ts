@@ -59,8 +59,12 @@ app.get('/clientes', async (req, res) => {
   }
 });
 
-app.get('/usuarios', async (req, res) => {
+app.get('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
+    // oculta painel para agentes
+    if (req.user.role === 'Agente') {
+      return res.status(403).json({ error: 'Acesso negado para agentes' });
+    }
     const usuarios = await prisma.usuario.findMany({
       select: { id: true, nome: true, username: true, role: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
@@ -72,10 +76,18 @@ app.get('/usuarios', async (req, res) => {
   }
 });
 
-app.post('/usuarios', async (req, res) => {
+app.post('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     const { name, email, password, role } = req.body;
     
+    // bloqueia criacao de hierarquia superior
+    const pesoLogado = PESOS_RBAC[req.user.role] || 0;
+    const pesoAlvo = PESOS_RBAC[role] || 0;
+    
+    if (pesoLogado <= pesoAlvo) {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
+    }
+
     // criptografa a senha antes de salvar no banco
     const hashedPassword = await bcrypt.hash(password, 10);
     

@@ -25,6 +25,7 @@ import * as Location from 'expo-location';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { api } from '../services/api';
 import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkin'>;
@@ -90,30 +91,11 @@ const LIMIAR_VELOCIDADE = 0.5;
 // ---------------------------------------------------------------------------
 
 
-const CLIENTES: ClienteAtendimento[] = [
-  {
-    id: 'alpha',
-    nome: 'Contabilidade Alpha',
-    endereco: 'Centro - Rio de Janeiro, RJ',
-    servico: 'Entrega de Token A3',
-    latitude: -22.9027,
-    longitude: -43.1772,
-  },
-  {
-    id: 'vida',
-    nome: 'Clinica Medica Vida',
-    endereco: 'Meier - Rio de Janeiro, RJ',
-    servico: 'Validacao Presencial e-CPF',
-    latitude: -22.9024,
-    longitude: -43.2831,
-  },
-];
-
 const RAIO_GEOFENCE_METROS = 100;
 
 const REGIAO_INICIAL: Region = {
-  latitude: (CLIENTES[0].latitude + CLIENTES[1].latitude) / 2,
-  longitude: (CLIENTES[0].longitude + CLIENTES[1].longitude) / 2,
+  latitude: -22.9027,
+  longitude: -43.1772,
   latitudeDelta: 0.05,
   longitudeDelta: 0.12,
 };
@@ -174,10 +156,33 @@ export default function CheckinScreen({ route }: Props) {
   const [estadoGps, setEstadoGps] = useState<EstadoGps>('solicitando_permissao');
   const [gpsIsMocked, setGpsIsMocked] = useState<boolean>(false);
 
-
-  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteAtendimento>(CLIENTES[0]);
+  const [clientes, setClientes] = useState<ClienteAtendimento[]>([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteAtendimento | null>(null);
   const [atendimentoIniciado, setAtendimentoIniciado] = useState<boolean>(false);
   const [statusRelatorio, setStatusRelatorio] = useState<OpcaoRelatorio | null>(null);
+
+  useEffect(() => {
+    async function loadClientes() {
+      try {
+        const { data } = await api.get('/clientes');
+        const mapeados = data.map((c: any) => ({
+          id: c.id,
+          nome: c.name,
+          endereco: c.address,
+          servico: c.statusOperacional || 'Pendente',
+          latitude: c.latitude,
+          longitude: c.longitude,
+        }));
+        setClientes(mapeados);
+        if (mapeados.length > 0) {
+          setClienteSelecionado(mapeados[0]);
+        }
+      } catch (err) {
+        console.log('[API] erro ao buscar clientes', err);
+      }
+    }
+    loadClientes();
+  }, []);
 
 
   // slideAnim: translateY da gaveta — parte fora da tela e anima para SNAP.ABERTA
@@ -282,7 +287,7 @@ export default function CheckinScreen({ route }: Props) {
 
 
   const distanciaMetros: number | null =
-    posicaoUsuario !== null
+    posicaoUsuario !== null && clienteSelecionado !== null
       ? haversineMetros(
         posicaoUsuario.coords.latitude,
         posicaoUsuario.coords.longitude,
@@ -299,7 +304,7 @@ export default function CheckinScreen({ route }: Props) {
   // monta o payload no schema prisma e envia via post para a api
   // 201: sucesso; 403: fraude detectada; outros: erro de conexao
   async function enviarCheckin(statusVisita: OpcaoRelatorio): Promise<void> {
-    if (!posicaoUsuario) return;
+    if (!posicaoUsuario || !clienteSelecionado) return;
 
     // alinhamento de contrato payload
     const body: PayloadCheckin = {
@@ -315,15 +320,10 @@ export default function CheckinScreen({ route }: Props) {
     setEnviando(true);
 
     try {
-      const resposta = await fetch('http://192.168.1.10:3333/api/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const resposta = await api.post('/checkin', body);
+      const dados = resposta.data;
 
-      const dados = await resposta.json();
-
-      if (resposta.status === 201) {
+      if (resposta.status === 201 || resposta.status === 200) {
         Alert.alert(
           'Check-in Registrado',
           'Visita registrada com sucesso.',
@@ -347,14 +347,18 @@ export default function CheckinScreen({ route }: Props) {
 
       Alert.alert('Falha no Check-in', mensagemServidor, [{ text: 'OK' }]);
 
-    } catch {
+    } catch (error: any) {
       // tratamento de erro nativo
-      // falha de rede ou servidor inacessivel
-      Alert.alert(
-        'Erro de Conexao',
-        'Nao foi possivel conectar ao servidor. Verifique sua rede e tente novamente.',
-        [{ text: 'OK' }],
-      );
+      if (error.response) {
+        Alert.alert('Falha no Check-in', error.response.data?.error || 'Erro no servidor', [{ text: 'OK' }]);
+      } else {
+        // falha de rede ou servidor inacessivel
+        Alert.alert(
+          'Erro de Conexao',
+          'Nao foi possivel conectar ao servidor. Verifique sua rede e tente novamente.',
+          [{ text: 'OK' }],
+        );
+      }
     } finally {
       setEnviando(false);
     }
@@ -362,7 +366,7 @@ export default function CheckinScreen({ route }: Props) {
 
 
   function selecionarCliente(cliente: ClienteAtendimento): void {
-    if (cliente.id !== clienteSelecionado.id) {
+    if (clienteSelecionado && cliente.id !== clienteSelecionado.id) {
       setAtendimentoIniciado(false);
       setStatusRelatorio(null);
     }
@@ -387,6 +391,7 @@ export default function CheckinScreen({ route }: Props) {
    *      cai automaticamente para a URL web do Google Maps.
    */
   function abrirNavegacao(): void {
+    if (!clienteSelecionado) return;
     const { latitude: lat, longitude: lng } = clienteSelecionado;
 
     // URL de fallback: funciona em qualquer dispositivo via browser.
@@ -586,8 +591,8 @@ export default function CheckinScreen({ route }: Props) {
           selecionado: marcador verde + geofence com opacidade maior
           nao selecionado: marcador cinza + geofence com opacidade reduzida
         */}
-        {CLIENTES.map((cliente) => {
-          const selecionado = cliente.id === clienteSelecionado.id;
+        {clientes.map((cliente) => {
+          const selecionado = clienteSelecionado && cliente.id === clienteSelecionado.id;
           return (
             <React.Fragment key={cliente.id}>
               <Marker
@@ -668,7 +673,7 @@ export default function CheckinScreen({ route }: Props) {
                 </Text>
               </View>
               <Text style={styles.nomeCliente} numberOfLines={1}>
-                {clienteSelecionado.nome}
+                {clienteSelecionado?.nome || 'Nenhum cliente selecionado'}
               </Text>
             </View>
 
@@ -693,12 +698,12 @@ export default function CheckinScreen({ route }: Props) {
 
                 <View style={styles.linhaInfo}>
                   <Text style={styles.linhaInfoRotulo}>Servico</Text>
-                  <Text style={styles.linhaInfoValor}>{clienteSelecionado.servico}</Text>
+                  <Text style={styles.linhaInfoValor}>{clienteSelecionado?.servico}</Text>
                 </View>
 
                 <View style={styles.linhaInfo}>
                   <Text style={styles.linhaInfoRotulo}>Endereco</Text>
-                  <Text style={styles.linhaInfoValor}>{clienteSelecionado.endereco}</Text>
+                  <Text style={styles.linhaInfoValor}>{clienteSelecionado?.endereco}</Text>
                 </View>
 
                 <View style={styles.linhaInfo}>
@@ -751,10 +756,10 @@ export default function CheckinScreen({ route }: Props) {
               {renderAcoesAtendimento()}
 
               {/* troca rapida de cliente na rota */}
-              {CLIENTES.filter((c) => c.id !== clienteSelecionado.id).length > 0 && (
+              {clienteSelecionado && clientes.filter((c) => c.id !== clienteSelecionado.id).length > 0 && (
                 <>
                   <Text style={styles.seletorTitulo}>Outros clientes na rota</Text>
-                  {CLIENTES
+                  {clientes
                     .filter((c) => c.id !== clienteSelecionado.id)
                     .map((cliente) => (
                       <TouchableOpacity

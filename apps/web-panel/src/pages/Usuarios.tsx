@@ -349,7 +349,7 @@ export default function Usuarios() {
                   onChange={(e) => setNivel(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="ADM Master">ADM Master</option>
+                  {pesoLogado > 50 && <option value="ADM Master">ADM Master</option>}
                   <option value="Gestor">Gestor</option>
                   <option value="Agente">Agente</option>
                 </select>

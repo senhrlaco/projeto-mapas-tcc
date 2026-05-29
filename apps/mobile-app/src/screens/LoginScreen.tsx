@@ -13,12 +13,11 @@ import {
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AxiosError } from 'axios';
+import { api } from '../services/api';
 import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
-
-// url da api — definir IP correto para dispositivo fisico
-const API_URL = 'http://SEU_IP_LOCAL:3333/api/auth/login';
 
 export default function LoginScreen({ navigation }: Props) {
   const [username, setUsername] = useState('');
@@ -34,18 +33,12 @@ export default function LoginScreen({ navigation }: Props) {
     setCarregando(true);
 
     try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password: senha }),
+      const res = await api.post('/auth/login', {
+        username: username.trim(),
+        password: senha
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        Alert.alert('Erro', 'Credenciais invalidas');
-        return;
-      }
+      const data = res.data;
 
       await SecureStore.setItemAsync('token', data.token);
 
@@ -55,8 +48,21 @@ export default function LoginScreen({ navigation }: Props) {
         clientName: 'Contabilidade Alpha',
       });
 
-    } catch {
-      Alert.alert('Erro', 'Nao foi possivel conectar ao servidor.');
+    } catch (error: any) {
+      const axiosError = error as AxiosError;
+      
+      if (axiosError.isAxiosError) {
+        if (axiosError.response) {
+          console.log('[LOGIN] Falha HTTP -> Status:', axiosError.response?.status);
+          console.log('[LOGIN] Payload:', axiosError.response?.data);
+        } else {
+          console.log('[LOGIN] Falha de Rede -> Msg:', axiosError.message);
+        }
+      } else {
+        console.log('[LOGIN] Falha Generica:', error);
+      }
+      
+      Alert.alert('Erro', 'Nao foi possivel conectar ou credenciais invalidas.');
     } finally {
       setCarregando(false);
     }
