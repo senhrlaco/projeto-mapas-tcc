@@ -4,7 +4,7 @@ import Usuarios from './pages/Usuarios'
 import Login from './pages/Login'
 
 function PrivateRoute() {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('@Savez:token')
   if (!token) return <Navigate to="/login" replace />
   return <Outlet />
 }
@@ -13,7 +13,7 @@ function Layout() {
   const navigate = useNavigate()
 
   function sair() {
-    localStorage.removeItem('token')
+    localStorage.removeItem('@Savez:token')
     navigate('/login')
   }
 

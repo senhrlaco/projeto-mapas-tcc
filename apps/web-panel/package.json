@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "axios": "^1.16.1",
     "lucide-react": "^1.17.0",
     "mapbox-gl": "^3.24.0",
     "react": "^19.2.6",

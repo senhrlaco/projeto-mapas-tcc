@@ -1,18 +1,16 @@
 
+import { api } from '../services/api'
+
 export async function fetcher<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': 'Bearer ' + localStorage.getItem('token'),
-      'Content-Type': 'application/json',
-    },
-  })
-
-  // o swr captura esse throw e expoe via error no hook
-  if (!res.ok) {
-    const err = new Error(`Requisicao falhou com status ${res.status}`)
-    ;(err as Error & { status: number }).status = res.status
-    throw err
+  try {
+    const res = await api.get(url)
+    return res.data
+  } catch (error: any) {
+    if (error.response) {
+      const err = new Error(`Requisicao falhou com status ${error.response.status}`)
+      ;(err as Error & { status: number }).status = error.response.status
+      throw err
+    }
+    throw error
   }
-
-  return res.json() as Promise<T>
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { fetcher } from '../lib/fetcher'
 
@@ -35,7 +35,7 @@ export default function Usuarios() {
   const [nivel, setNivel] = useState('Agente')
 
   let loggedUser: any = null
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('@Savez:token')
   if (token) {
     try {
       loggedUser = JSON.parse(atob(token.split('.')[1]))
@@ -50,21 +50,22 @@ export default function Usuarios() {
   }
   const pesoLogado = PESOS_RBAC[loggedUser?.role || 'Agente'] || 0
 
-  if (error && (error as Error & { status?: number }).status === 401 || error && (error as Error & { status?: number }).status === 403) {
-    localStorage.clear()
-    navigate('/login')
+  if (error && ((error as any).status === 401 || (error as any).status === 403)) {
+    localStorage.removeItem('@Savez:token')
+    // corrige warning do react router com componente navigate
+    return <Navigate to="/login" replace />
   }
 
   function headersEscrita(): HeadersInit {
     return {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + localStorage.getItem('token'),
+      'Authorization': 'Bearer ' + localStorage.getItem('@Savez:token'),
     }
   }
 
   function tratarFalhaDeAutenticacao(status: number) {
     if (status === 401 || status === 403) {
-      localStorage.clear()
+      localStorage.removeItem('@Savez:token')
       navigate('/login')
     }
   }

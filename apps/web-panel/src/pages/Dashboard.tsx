@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { Map, Marker, Popup } from 'react-map-gl/mapbox'
 import useSWR from 'swr'
 import 'mapbox-gl/dist/mapbox-gl.css'
@@ -72,14 +72,15 @@ export default function Dashboard() {
     (e) => e && ((e as Error & { status?: number }).status === 401 || (e as Error & { status?: number }).status === 403),
   )
   if (erroDeAutenticacao) {
-    localStorage.clear()
-    navigate('/login')
+    localStorage.removeItem('@Savez:token')
+    // corrige warning do react router com componente navigate
+    return <Navigate to="/login" replace />
   }
 
   function headersEscrita(): HeadersInit {
     return {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + localStorage.getItem('token'),
+      'Authorization': 'Bearer ' + localStorage.getItem('@Savez:token'),
     }
   }
 
@@ -153,7 +154,7 @@ export default function Dashboard() {
       })
 
       if (res.status === 401 || res.status === 403) {
-        localStorage.clear()
+        localStorage.removeItem('@Savez:token')
         navigate('/login')
         return
       }

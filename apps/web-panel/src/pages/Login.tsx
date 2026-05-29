@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '../services/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -22,23 +23,11 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-
       // sanitiza usuario e envia credenciais
-      const res = await fetch(`${baseURL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: usuario.trim(), senha }),
-      })
+      const response = await api.post('/auth/login', { login: usuario.trim(), senha })
+      const data = response.data
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        setErro('Credenciais invalidas')
-        return
-      }
-
-      localStorage.setItem('token', data.token)
+      localStorage.setItem('@Savez:token', data.token)
       navigate('/')
 
     } catch {
