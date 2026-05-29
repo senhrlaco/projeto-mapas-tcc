@@ -20,21 +20,24 @@ import { RootStackParamList } from '../../App';
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-  const [username, setUsername] = useState('');
+  const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
-  const [carregando, setCarregando] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleEntrar = async () => {
-    if (!username.trim() || !senha.trim()) {
+  const handleLogin = async () => {
+    // trava o fluxo se campos estiverem vazios
+    if (!usuario.trim() || !senha.trim()) {
       Alert.alert('Campos obrigatorios', 'Preencha o usuario e a senha.');
+      setIsLoading(false);
       return;
     }
 
-    setCarregando(true);
+    setIsLoading(true);
 
     try {
+      // sanitiza espacos vazios do usuario antes do envio
       const res = await api.post('/auth/login', {
-        username: username.trim(),
+        username: usuario.trim(),
         password: senha
       });
 
@@ -43,9 +46,7 @@ export default function LoginScreen({ navigation }: Props) {
       await SecureStore.setItemAsync('token', data.token);
 
       navigation.navigate('Checkin', {
-        userId: data.id ?? username,
-        clientId: 'cliente-contabilidade-alpha',
-        clientName: 'Contabilidade Alpha',
+        userId: data.id ?? usuario,
       });
 
     } catch (error: any) {
@@ -64,7 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
       
       Alert.alert('Erro', 'Nao foi possivel conectar ou credenciais invalidas.');
     } finally {
-      setCarregando(false);
+      setIsLoading(false);
     }
   };
 
@@ -85,9 +86,9 @@ export default function LoginScreen({ navigation }: Props) {
           placeholderTextColor="#9ca3af"
           autoCapitalize="none"
           autoCorrect={false}
-          value={username}
-          onChangeText={setUsername}
-          editable={!carregando}
+          value={usuario}
+          onChangeText={setUsuario}
+          editable={!isLoading}
         />
 
         <Text style={styles.label}>Senha</Text>
@@ -95,19 +96,20 @@ export default function LoginScreen({ navigation }: Props) {
           style={styles.input}
           placeholder="Sua senha de acesso"
           placeholderTextColor="#9ca3af"
-          secureTextEntry
+          secureTextEntry={true}
           value={senha}
           onChangeText={setSenha}
-          editable={!carregando}
+          editable={!isLoading}
         />
 
+        {/* feedback visual de loading no botao */}
         <TouchableOpacity
-          style={[styles.botao, carregando && styles.botaoDesabilitado]}
-          onPress={handleEntrar}
+          style={[styles.botao, isLoading && styles.botaoDesabilitado]}
+          onPress={handleLogin}
           activeOpacity={0.8}
-          disabled={carregando}
+          disabled={isLoading}
         >
-          {carregando ? (
+          {isLoading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
             <Text style={styles.botaoTexto}>Entrar</Text>
