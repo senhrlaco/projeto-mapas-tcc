@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { calcularDistanciaEmMetros } from './utils/geofencing';
 import checkinRoutes from './routes/checkin.routes';
@@ -93,10 +94,43 @@ app.post('/usuarios', async (req, res) => {
   }
 });
 
-app.put('/usuarios/:id', async (req, res) => {
+// valida hierarquia por sistema de pesos
+const PESOS_RBAC: Record<string, number> = {
+  'ADM Master': 100,
+  'Gestor': 50,
+  'Agente': 10,
+};
+
+// middleware para verificar o jwt
+const verificarToken = (req: any, res: any, next: any) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Nao autorizado' });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Token invalido' });
+  }
+};
+
+app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { name, email, role } = req.body;
+    const loggedUser = req.user;
+
+    const targetUser = await prisma.usuario.findUnique({ where: { id } });
+    if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
+
+    // valida hierarquia por sistema de pesos
+    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+
+    if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
+      return res.status(403).json({ error: 'Sem permissao para editar este usuario' });
+    }
+
     const usuario = await prisma.usuario.update({
       where: { id },
       data: {
@@ -112,14 +146,59 @@ app.put('/usuarios/:id', async (req, res) => {
   }
 });
 
-app.delete('/usuarios/:id', async (req, res) => {
+app.delete('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
+    const loggedUser = req.user;
+
+    const targetUser = await prisma.usuario.findUnique({ where: { id } });
+    if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
+
+    // valida hierarquia por sistema de pesos
+    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+
+    if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
+      return res.status(403).json({ error: 'Sem permissao para excluir este usuario' });
+    }
+
     await prisma.usuario.delete({ where: { id } });
     return res.status(204).send();
   } catch (error) {
     console.error('[DELETE /usuarios/:id]', error);
     return res.status(500).json({ error: 'erro ao excluir usuario' });
+  }
+});
+
+app.patch('/usuarios/:id/senha', verificarToken, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { novaSenha } = req.body;
+    const loggedUser = req.user;
+
+    const targetUser = await prisma.usuario.findUnique({ where: { id } });
+    if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
+
+    // valida hierarquia por sistema de pesos
+    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+
+    if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
+      return res.status(403).json({ error: 'Sem permissao para alterar senha deste usuario' });
+    }
+
+    // criptografa nova senha
+    const hashedPassword = await bcrypt.hash(novaSenha, 10);
+
+    await prisma.usuario.update({
+      where: { id },
+      data: { password: hashedPassword }
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[PATCH /usuarios/:id/senha]', error);
+    return res.status(500).json({ error: 'erro ao alterar senha' });
   }
 });
 
