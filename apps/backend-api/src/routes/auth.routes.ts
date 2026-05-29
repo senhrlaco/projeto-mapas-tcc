@@ -17,15 +17,21 @@ router.post('/login', async (req: Request, res: Response) => {
       where: { login },
     })
 
+    // barra execucao se usuario nao existir
     if (!usuario) {
-      return res.status(401).json({ error: 'Usuario nao encontrado.' })
+      return res.status(401).json({ error: 'Credenciais invalidas' })
     }
 
     // compara a senha digitada com o hash salvo
     const senhaValida = await bcrypt.compare(senha, usuario.password)
 
     if (!senhaValida) {
-      return res.status(401).json({ error: 'Senha incorreta.' })
+      return res.status(401).json({ error: 'Credenciais invalidas' })
+    }
+
+    // valida assinatura jwt e chaves de ambiente
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET nao definido no servidor')
     }
 
     const token = jwt.sign(
@@ -41,8 +47,9 @@ router.post('/login', async (req: Request, res: Response) => {
     })
 
   } catch (error) {
-    console.error('[auth.routes] erro no login:', error)
-    return res.status(500).json({ error: 'Erro interno no servidor.' })
+    // telemetria de erro para logs do servidor
+    console.error("erro critico no login:", error)
+    return res.status(500).json({ error: 'Erro interno no servidor' })
   }
 })
 
