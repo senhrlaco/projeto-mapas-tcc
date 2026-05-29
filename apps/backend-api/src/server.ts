@@ -136,12 +136,37 @@ app.post('/clientes', async (req, res) => {
 app.delete('/clientes/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("Tentativa de exclusão do ID:", id);
     // garante exclusao do registro no banco via prisma
     await prisma.client.delete({ where: { id } });
     return res.status(200).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error('[DELETE /clientes/:id]', error);
-    return res.status(400).json({ error: 'erro ao excluir: cliente nao encontrado ou com vinculos ativos' });
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/clientes/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { statusOperacional } = req.body;
+
+    const statusPermitidos = ['PENDENTE', 'VISITA_REALIZADA', 'ENTREGA_REALIZADA', 'TOKEN_ENTREGUE', 'FALTA_DOCUMENTOS'];
+
+    if (!statusPermitidos.includes(statusOperacional)) {
+      return res.status(400).json({ error: 'status invalido' });
+    }
+
+    // atualiza status do cliente via painel web
+    const cliente = await prisma.client.update({
+      where: { id },
+      data: { statusOperacional }
+    });
+
+    return res.status(200).json(cliente);
+  } catch (error: any) {
+    console.error('[PATCH /clientes/:id/status]', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 

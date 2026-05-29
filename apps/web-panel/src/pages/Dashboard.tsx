@@ -271,6 +271,44 @@ export default function Dashboard() {
                     {selectedMarker.address && (
                       <p className="text-gray-500 text-xs mb-3">{selectedMarker.address}</p>
                     )}
+
+                    <div className="mb-3 border-t border-gray-100 pt-3 mt-1">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Status Operacional</label>
+                      <select
+                        className="w-full border border-gray-200 rounded text-xs py-1.5 px-2 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                        value={selectedMarker.statusOperacional || 'PENDENTE'}
+                        onChange={async (e) => {
+                          const novoStatus = e.target.value
+                          const clienteAtualizado = { ...selectedMarker, statusOperacional: novoStatus }
+                          
+                          setSelectedMarker(clienteAtualizado)
+                          mutateClientes(clientes.map(c => c.id === clienteAtualizado.id ? clienteAtualizado : c), false)
+
+                          try {
+                            const res = await fetch(`${baseURL}/clientes/${clienteAtualizado.id}/status`, {
+                              method: 'PATCH',
+                              headers: headersEscrita(),
+                              body: JSON.stringify({ statusOperacional: novoStatus })
+                            })
+
+                            if (!res.ok) throw new Error('falha na atualizacao')
+
+                            // revalida cache do swr para atualizar as cores do mapa
+                            mutateClientes()
+                          } catch {
+                            alert('Erro ao atualizar o status do cliente.')
+                            mutateClientes()
+                          }
+                        }}
+                      >
+                        <option value="PENDENTE">Pendente</option>
+                        <option value="VISITA_REALIZADA">Visita Realizada</option>
+                        <option value="ENTREGA_REALIZADA">Entrega Realizada</option>
+                        <option value="TOKEN_ENTREGUE">Token Entregue</option>
+                        <option value="FALTA_DOCUMENTOS">Falta de Documentos</option>
+                      </select>
+                    </div>
+
                     <button
                       onClick={async () => {
                         const clienteParaRemover = selectedMarker.id
@@ -283,11 +321,15 @@ export default function Dashboard() {
                             method: 'DELETE',
                             headers: headersEscrita(),
                           })
-                          if (!res.ok) throw new Error('Falha')
+                          if (!res.ok) {
+                            const errData = await res.json().catch(() => ({}))
+                            throw new Error(errData.error || 'falha no servidor')
+                          }
                           mutateClientes()
-                        } catch {
+                        } catch (error: any) {
                           // reverte exclusao caso backend falhe
                           mutateClientes()
+                          alert(`Erro ao excluir cliente: ${error.message}`)
                         }
                       }}
                       className="mt-3 w-full text-xs text-red-600 hover:text-red-700 font-semibold py-1 border border-red-200 hover:bg-red-50 rounded"

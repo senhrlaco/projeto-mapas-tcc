@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "486e63ab-323d-4c55-bca9-eca5347f4abf"
+      }
+    },
+    "android": {
+      "package": "com.senhorlaco.lblogisticaecossistema"
+    }
+  }
+}
