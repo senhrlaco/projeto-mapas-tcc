@@ -7,8 +7,6 @@ import { fetcher } from '../lib/fetcher'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
-// token do mapbox via variavel de ambiente do Vite
-// adicione VITE_MAPBOX_TOKEN=pk.eyJ... no .env do web-panel
 
 type Visita = {
   id: string
@@ -27,7 +25,6 @@ type Cliente = {
   longitude: number
 }
 
-// marcador selecionado pode ser cliente ou nulo — visitas nao tem coordenadas proprias
 type MarkerSelecionado = Cliente | null
 
 type RespostaPing = {
@@ -38,42 +35,37 @@ type RespostaPing = {
 export default function Dashboard() {
   const navigate = useNavigate()
 
-  // controla qual marcador esta com o popup aberto
   const [selectedMarker, setSelectedMarker] = useState<MarkerSelecionado>(null)
 
-  // modal de cadastro de cliente por geocoding
   const [modalClienteAberto, setModalClienteAberto] = useState(false)
   const [nomeCliente, setNomeCliente] = useState('')
   const [enderecoCliente, setEnderecoCliente] = useState('')
   const [erroGeocodificacao, setErroGeocodificacao] = useState('')
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
-  // estado da camera do mapa - centro do RJ como posicao inicial
+  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [selectedCoords, setSelectedCoords] = useState<[number, number] | null>(null)
+
   const [viewState, setViewState] = useState({
     longitude: -43.1772,
     latitude: -22.9027,
     zoom: 11,
   })
 
-  // busca os totais do servidor — sem polling, dado relativamente estatico
   const { data: ping, error: pingError } = useSWR<RespostaPing>(`${baseURL}/ping`, fetcher)
 
-  // busca a lista de clientes para renderizar no mapa — sem polling
   const {
     data: clientes = [],
     mutate: mutateClientes,
     error: clientesError,
   } = useSWR<Cliente[]>(`${baseURL}/clientes`, fetcher)
 
-  // polling de visitas a cada 10 segundos via refreshInterval do SWR
-  // o SWR gerencia o intervalo internamente, sem risco de memory leak
   const { data: visitas = [], error: visitasError } = useSWR<Visita[]>(
     `${baseURL}/visitas`,
     fetcher,
     { refreshInterval: 10_000 },
   )
 
-  // redireciona pro login se qualquer requisicao retornar 401 ou 403
   const erros = [pingError, clientesError, visitasError]
   const erroDeAutenticacao = erros.some(
     (e) => e && ((e as Error & { status?: number }).status === 401 || (e as Error & { status?: number }).status === 403),
@@ -83,7 +75,6 @@ export default function Dashboard() {
     navigate('/login')
   }
 
-  // headers para as operacoes de escrita que nao passam pelo fetcher
   function headersEscrita(): HeadersInit {
     return {
       'Content-Type': 'application/json',
@@ -95,6 +86,8 @@ export default function Dashboard() {
     setNomeCliente('')
     setEnderecoCliente('')
     setErroGeocodificacao('')
+    setSuggestions([])
+    setSelectedCoords(null)
     setModalClienteAberto(true)
   }
 
@@ -103,6 +96,30 @@ export default function Dashboard() {
     setNomeCliente('')
     setEnderecoCliente('')
     setErroGeocodificacao('')
+    setSuggestions([])
+    setSelectedCoords(null)
+  }
+
+  // busca enderecos direto na api do mapbox
+  async function buscarSugestoes(texto: string) {
+    setEnderecoCliente(texto)
+    setSelectedCoords(null)
+    if (erroGeocodificacao) setErroGeocodificacao('')
+
+    if (texto.length < 3) {
+      setSuggestions([])
+      return
+    }
+
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(texto)}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&autocomplete=true&types=address,poi&country=br&limit=5`
+      )
+      const data = await res.json()
+      setSuggestions(data.features || [])
+    } catch {
+      // ignora erro silencioso no typeahead
+    }
   }
 
   async function salvarCliente() {
@@ -111,39 +128,17 @@ export default function Dashboard() {
       return
     }
 
+    // trava envio sem coordenada valida
+    if (!selectedCoords) {
+      setErroGeocodificacao('Selecione um endereco valido da lista.')
+      return
+    }
+
     setErroGeocodificacao('')
     setSalvandoCliente(true)
 
     try {
-      // geocodifica o endereco digitado para obter as coordenadas reais
-      const geocodeURL =
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-        `${encodeURIComponent(enderecoCliente)}.json` +
-        `?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&limit=1`
-
-      const geocodeRes = await fetch(geocodeURL)
-
-      if (!geocodeRes.ok) {
-        setErroGeocodificacao('Servico de geocodificacao indisponivel. Tente novamente.')
-        return
-      }
-
-      const geocodeData = await geocodeRes.json()
-
-      // valida se o endereco retornou algum resultado
-      if (!geocodeData.features || geocodeData.features.length === 0) {
-        setErroGeocodificacao('Endereco nao encontrado. Tente ser mais especifico.')
-        return
-      }
-
-      // Extrai coordenadas garantindo a ordem [lng, lat] do Mapbox
-      const [lng, lat] = geocodeData.features[0].center as [number, number]
-
-      // validacao extra antes de enviar — Mapbox raramente retorna NaN, mas o guard nao custa nada
-      if (isNaN(lat) || isNaN(lng)) {
-        setErroGeocodificacao('Coordenadas invalidas retornadas pelo servico de geocodificacao.')
-        return
-      }
+      const [lng, lat] = selectedCoords
 
       const res = await fetch(`${baseURL}/clientes`, {
         method: 'POST',
@@ -167,7 +162,6 @@ export default function Dashboard() {
         return
       }
 
-      // invalida o cache do SWR — o mapa reflete o novo pino imediatamente
       mutateClientes()
       fecharModalCliente()
     } catch {
@@ -180,7 +174,6 @@ export default function Dashboard() {
   return (
     <div className="p-8">
 
-      {/* cabecalho */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Visao Geral</h1>
@@ -194,7 +187,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* cards de resumo */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-lg shadow-md p-5">
           <p className="text-sm text-gray-500">Usuarios Cadastrados</p>
@@ -202,7 +194,6 @@ export default function Dashboard() {
           <p className="text-xs text-gray-400 mt-1">registros ativos no banco</p>
         </div>
 
-        {/* card de total de visitas — atualiza junto com o polling do SWR */}
         <div className="bg-white rounded-lg shadow-md p-5">
           <p className="text-sm text-gray-500">Visitas Recentes</p>
           <p className="text-3xl font-bold text-gray-800 mt-1">{visitas.length}</p>
@@ -216,7 +207,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* mapa mapbox */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
         <div className="px-5 py-3 border-b border-gray-100">
           <p className="text-sm font-semibold text-gray-700">Mapa de Visitas</p>
@@ -230,7 +220,6 @@ export default function Dashboard() {
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
             style={{ width: '100%', height: '600px' }}
           >
-            {/* pinos dos clientes — coordenadas validadas para evitar NaN no Mapbox */}
             {clientes.map((c) => {
               const lat = Number(c.latitude)
               const lng = Number(c.longitude)
@@ -242,7 +231,7 @@ export default function Dashboard() {
                   latitude={lat}
                   color="#2563eb"
                   onClick={(e) => {
-                    // impede que o clique no marcador propague para o mapa
+                    // impede propagacao do clique para o mapa
                     e.originalEvent.stopPropagation()
                     setSelectedMarker(c)
                   }}
@@ -250,7 +239,6 @@ export default function Dashboard() {
               )
             })}
 
-            {/* popup do marcador selecionado */}
             {selectedMarker && (() => {
               const lat = Number(selectedMarker.latitude)
               const lng = Number(selectedMarker.longitude)
@@ -268,6 +256,23 @@ export default function Dashboard() {
                     {selectedMarker.address && (
                       <p className="text-gray-500 text-xs mt-1">{selectedMarker.address}</p>
                     )}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch(`${baseURL}/clientes/${selectedMarker.id}`, {
+                            method: 'DELETE',
+                            headers: headersEscrita(),
+                          })
+                          mutateClientes()
+                          setSelectedMarker(null)
+                        } catch {
+                          // ignora
+                        }
+                      }}
+                      className="mt-3 w-full text-xs text-red-600 hover:text-red-700 font-semibold py-1 border border-red-200 hover:bg-red-50 rounded"
+                    >
+                      Excluir Cliente
+                    </button>
                   </div>
                 </Popup>
               )
@@ -276,7 +281,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* tabela das ultimas visitas */}
       {visitas.length > 0 && (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100">
@@ -320,10 +324,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* modal de cadastro de cliente via geocoding */}
       {modalClienteAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* fundo escuro */}
           <div
             className="absolute inset-0 bg-black bg-opacity-50"
             onClick={fecharModalCliente}
@@ -344,20 +346,33 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Endereco Completo</label>
                 <input
                   type="text"
                   placeholder="ex: Rua da Quitanda 86, Centro, Rio de Janeiro"
                   value={enderecoCliente}
-                  onChange={(e) => {
-                    setEnderecoCliente(e.target.value)
-                    // limpa o erro ao comecar a digitar novamente
-                    if (erroGeocodificacao) setErroGeocodificacao('')
-                  }}
+                  onChange={(e) => buscarSugestoes(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {/* feedback de erro do geocoding — visivel apenas quando necessario */}
+                {suggestions.length > 0 && (
+                  <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+                    {suggestions.map((s) => (
+                      <li
+                        key={s.id}
+                        onClick={() => {
+                          setEnderecoCliente(s.place_name)
+                          setSelectedCoords(s.center as [number, number])
+                          // limpa sugestoes ao selecionar
+                          setSuggestions([])
+                        }}
+                        className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        {s.place_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {erroGeocodificacao && (
                   <p className="text-xs text-red-600 mt-1">{erroGeocodificacao}</p>
                 )}

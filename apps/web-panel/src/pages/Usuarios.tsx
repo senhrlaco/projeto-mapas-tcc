@@ -5,7 +5,6 @@ import { fetcher } from '../lib/fetcher'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
 
-// campos conforme model Usuario do Prisma
 type Usuario = {
   id: string
   nome: string
@@ -16,8 +15,6 @@ type Usuario = {
 export default function Usuarios() {
   const navigate = useNavigate()
 
-  // o SWR busca e cacheia a lista; ao voltar para esta rota, exibe o cache imediatamente
-  // enquanto revalida em segundo plano — sem tela em branco na navegacao
   const {
     data: usuarios = [],
     isLoading,
@@ -25,7 +22,6 @@ export default function Usuarios() {
     error,
   } = useSWR<Usuario[]>(`${baseURL}/usuarios`, fetcher)
 
-  // estado de operacoes de escrita (POST, PUT, DELETE) — separado do loading do SWR
   const [salvando, setSalvando] = useState(false)
 
   const [modalAberto, setModalAberto] = useState(false)
@@ -36,13 +32,11 @@ export default function Usuarios() {
   const [senha, setSenha] = useState('')
   const [nivel, setNivel] = useState('Agente')
 
-  // redireciona pro login se o SWR receber 401 ou 403
   if (error && (error as Error & { status?: number }).status === 401 || error && (error as Error & { status?: number }).status === 403) {
     localStorage.clear()
     navigate('/login')
   }
 
-  // headers para as operacoes de escrita que nao passam pelo fetcher
   function headersEscrita(): HeadersInit {
     return {
       'Content-Type': 'application/json',
@@ -79,7 +73,7 @@ export default function Usuarios() {
     setUsuarioEmEdicao(user)
     setNome(user.nome)
     setLogin(user.username)
-    setSenha('') // senha nunca trafega de volta pro front
+    setSenha('') // senha nunca volta pro front
     setNivel(user.role)
     setModalAberto(true)
   }
@@ -101,7 +95,6 @@ export default function Usuarios() {
         return
       }
 
-      // invalida o cache do SWR para que a lista seja atualizada imediatamente
       mutate()
     } catch {
       alert('Falha de conexao ao excluir usuario.')
@@ -129,7 +122,7 @@ export default function Usuarios() {
         ? `${baseURL}/usuarios/${usuarioEmEdicao.id}`
         : `${baseURL}/usuarios`
 
-      // traduz os estados locais para os campos que o servidor espera
+      // traduz estados locais para os campos esperados pelo servidor
       const corpo: Record<string, unknown> = { name: nome, email: login, role: nivel }
       if (!ehEdicao) corpo.password = senha
 
@@ -146,7 +139,6 @@ export default function Usuarios() {
         return
       }
 
-      // revalida o cache do SWR — a lista reflete o estado real do banco
       mutate()
       fecharModal()
     } catch {
@@ -160,7 +152,6 @@ export default function Usuarios() {
 
   return (
     <div className="p-8">
-      {/* cabecalho da pagina */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Usuarios</h1>
@@ -175,7 +166,6 @@ export default function Usuarios() {
         </button>
       </div>
 
-      {/* tabela de usuarios */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -224,18 +214,14 @@ export default function Usuarios() {
         </table>
       </div>
 
-      {/* modal de criar/editar usuario */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* fundo escuro */}
           <div
             className="absolute inset-0 bg-black bg-opacity-50"
             onClick={fecharModal}
           />
 
-          {/* caixa do modal */}
           <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-            {/* titulo muda conforme o modo */}
             <h2 className="text-lg font-bold text-gray-800 mb-5">
               {usuarioEmEdicao ? 'Editar Usuario' : 'Novo Usuario'}
             </h2>

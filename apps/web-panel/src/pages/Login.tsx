@@ -4,12 +4,10 @@ import { useNavigate } from 'react-router-dom'
 export default function Login() {
   const navigate = useNavigate()
 
-  // campos do form
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [carregando, setCarregando] = useState(false)
 
-  // bate na api pra logar
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setCarregando(true)
@@ -29,7 +27,6 @@ export default function Login() {
         return
       }
 
-      // salva o token e manda pro dashboard
       localStorage.setItem('token', data.token)
       navigate('/')
 

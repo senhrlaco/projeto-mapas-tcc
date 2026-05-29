@@ -3,14 +3,12 @@ import Dashboard from './pages/Dashboard'
 import Usuarios from './pages/Usuarios'
 import Login from './pages/Login'
 
-// joga o cara pro login se nao tiver token
 function PrivateRoute() {
   const token = localStorage.getItem('token')
   if (!token) return <Navigate to="/login" replace />
   return <Outlet />
 }
 
-// sidebar + area de conteudo das paginas autenticadas
 function Layout() {
   const navigate = useNavigate()
 
@@ -22,7 +20,6 @@ function Layout() {
   return (
     <div className="flex h-screen bg-gray-50">
 
-      {/* sidebar fixa */}
       <aside className="w-56 bg-slate-900 text-white flex flex-col flex-shrink-0">
         <div className="p-5 border-b border-slate-700">
           <p className="text-xs text-slate-400 uppercase tracking-widest">Savez Logistica</p>
@@ -56,7 +53,6 @@ function Layout() {
           </NavLink>
         </nav>
 
-        {/* botao de logout no rodape da sidebar */}
         <div className="mt-auto border-t border-slate-700">
           <button
             onClick={sair}
@@ -67,7 +63,6 @@ function Layout() {
         </div>
       </aside>
 
-      {/* area de conteudo - o Outlet renderiza a pagina filha */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
@@ -76,15 +71,12 @@ function Layout() {
   )
 }
 
-// rotas da aplicacao
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* rota publica - sem sidebar */}
         <Route path="/login" element={<Login />} />
 
-        {/* rotas privadas - passa pelo guard antes de mostrar */}
         <Route element={<PrivateRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
