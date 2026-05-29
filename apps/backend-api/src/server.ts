@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { calcularDistanciaEmMetros } from './utils/geofencing';
 import checkinRoutes from './routes/checkin.routes';
@@ -73,11 +74,15 @@ app.get('/usuarios', async (req, res) => {
 app.post('/usuarios', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
+    
+    // criptografa a senha antes de salvar no banco
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
     const usuario = await prisma.usuario.create({
       data: {
         nome: name,
         username: email,
-        password,
+        password: hashedPassword,
         role: role ?? 'AGENTE',
       },
     });

@@ -20,7 +20,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Usuario nao encontrado.' })
     }
 
-    // compara senha em texto puro com o hash armazenado
+    // compara a senha digitada com o hash salvo
     const senhaValida = await bcrypt.compare(password, usuario.password)
 
     if (!senhaValida) {
