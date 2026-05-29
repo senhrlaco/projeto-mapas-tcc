@@ -1,4 +1,3 @@
-// src/server.ts
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,19 +13,15 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// rotas de autenticacao (login jwt)
 app.use('/api/auth', authRoutes);
 
-// rotas de check-in logistico (geofencing + antifraude)
 app.use('/api/checkin', checkinRoutes);
 
-// rota de saude do servidor
 app.get('/ping', async (req, res) => {
   const usersCount = await prisma.user.count();
   return res.json({ status: 'ok', totalUsuarios: usersCount });
 });
 
-// ultimas 50 visitas com dados do agente e do cliente para o dashboard
 app.get('/visitas', async (req, res) => {
   try {
     const visitas = await prisma.visit.findMany({
@@ -44,7 +39,6 @@ app.get('/visitas', async (req, res) => {
   }
 });
 
-// todos os pontos de destino para renderizar no mapa
 app.get('/clientes', async (req, res) => {
   try {
     const clientes = await prisma.client.findMany({
@@ -58,7 +52,6 @@ app.get('/clientes', async (req, res) => {
   }
 });
 
-// lista todos os usuarios do painel
 app.get('/usuarios', async (req, res) => {
   try {
     const usuarios = await prisma.usuario.findMany({
@@ -72,7 +65,6 @@ app.get('/usuarios', async (req, res) => {
   }
 });
 
-// cadastra um novo usuario do painel
 app.post('/usuarios', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -91,7 +83,6 @@ app.post('/usuarios', async (req, res) => {
   }
 });
 
-// atualiza nome, username e role de um usuario existente
 app.put('/usuarios/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -111,7 +102,6 @@ app.put('/usuarios/:id', async (req, res) => {
   }
 });
 
-// remove um usuario do painel
 app.delete('/usuarios/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -123,7 +113,6 @@ app.delete('/usuarios/:id', async (req, res) => {
   }
 });
 
-// cria um cliente fake ter um destino
 app.post('/clientes', async (req, res) => {
   try {
     const { name, address, latitude, longitude } = req.body;
@@ -139,13 +128,23 @@ app.post('/clientes', async (req, res) => {
   }
 });
 
-// a rota do check-in
+app.delete('/clientes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // garante exclusao do registro no banco via prisma
+    await prisma.client.delete({ where: { id } });
+    return res.status(200).send();
+  } catch (error) {
+    console.error('[DELETE /clientes/:id]', error);
+    return res.status(400).json({ error: 'erro ao excluir: cliente nao encontrado ou com vinculos ativos' });
+  }
+});
+
 app.post('/checkin', async (req, res) => {
   try {
-    // pega os dados que o celular vai mandar
     const { userId, clientId, capturedLat, capturedLng, gpsAccuracy, isMocked } = req.body;
 
-    // 1. trava de seguranca basica do celular
+    // rejeita gps simulado ou precisao ruim
     if (isMocked || gpsAccuracy > 50) {
       return res.status(400).json({
         error: 'fraude detectada ou sinal de gps muito fraco',
@@ -153,13 +152,11 @@ app.post('/checkin', async (req, res) => {
       });
     }
 
-    // 2. busca o cliente no banco pra ver onde o cara devia estar
     const cliente = await prisma.client.findUnique({ where: { id: clientId } });
     if (!cliente) {
       return res.status(404).json({ error: 'cliente nao encontrado' });
     }
 
-    // 3. o calculo
     const distancia = calcularDistanciaEmMetros(
       capturedLat,
       capturedLng,
@@ -167,13 +164,11 @@ app.post('/checkin', async (req, res) => {
       cliente.longitude
     );
 
-    // 4. a regra de negocio dos 100 metros
     const statusCheckin = distancia <= 100 ? 'VALIDO' : 'FORA_DA_CERCA';
 
-    // 5. salva no banco o resultado da operacao
     const visita = await prisma.visit.create({
       data: {
-        userId, // em um cenario real pegaria do token jwt
+        userId, // extrair do token jwt em producao
         clientId,
         capturedLat,
         capturedLng,

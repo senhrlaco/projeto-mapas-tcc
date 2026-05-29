@@ -1,4 +1,3 @@
-// calcula distancia em metros entre dois pontos geograficos
 const RAIO_TERRA_METROS = 6371e3;
 
 export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {

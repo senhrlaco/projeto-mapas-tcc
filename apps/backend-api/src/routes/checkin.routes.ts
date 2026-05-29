@@ -1,4 +1,3 @@
-// src/routes/checkin.routes.ts
 
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
@@ -7,7 +6,7 @@ import { haversine } from '../utils/haversine';
 const router = Router();
 const prisma = new PrismaClient();
 
-// ponto de entrega fixo pra simular o geofencing (trocar por busca no banco depois)
+// destino fixo para simulacao — substituir por busca no banco
 const DESTINO_SIMULADO = {
   clienteId: 'cliente-simulado-001',
   latitude: -23.5505,
@@ -20,7 +19,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const { colaboradorId, clienteId, latitude, longitude, isMocked } = req.body;
 
-    // GPS simulado = fraude, recusa na hora
+    // gps simulado e tratado como fraude — rejeita imediatamente
     if (isMocked === true) {
       return res.status(403).json({
         error: 'Fraude de GPS detectada.',
@@ -28,7 +27,6 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // calcula quantos metros o colaborador ta do destino
     const distanciaMetros = haversine(
       latitude,
       longitude,
@@ -36,11 +34,9 @@ router.post('/', async (req: Request, res: Response) => {
       DESTINO_SIMULADO.longitude,
     );
 
-    // define o status: dentro ou fora da cerca de 100m
     const alertaGeofence = distanciaMetros > RAIO_MAXIMO_METROS;
     const status = alertaGeofence ? 'FORA_DA_CERCA' : 'VALIDO';
 
-    // salva o registro no banco
     const checkin = await prisma.checkin.create({
       data: {
         colaboradorId,
@@ -53,7 +49,6 @@ router.post('/', async (req: Request, res: Response) => {
       },
     });
 
-    // devolve o registro criado
     return res.status(201).json(checkin);
 
   } catch (error) {

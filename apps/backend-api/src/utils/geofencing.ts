@@ -1,6 +1,5 @@
-// formula haversine adaptada pro geofencing logistico
 export function calcularDistanciaEmMetros(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const raioTerra = 6371e3; // em metros 
+  const raioTerra = 6371e3; // raio medio da terra em metros
   const rad = Math.PI / 180;
   
   const dLat = (lat2 - lat1) * rad;

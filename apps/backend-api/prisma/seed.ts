@@ -4,7 +4,6 @@ import bcrypt from 'bcrypt'
 const prisma = new PrismaClient()
 
 async function main() {
-  // verifica se o admin ja existe antes de criar
   const jaExiste = await prisma.usuario.findUnique({
     where: { username: 'lucas.mello' },
   })
@@ -14,7 +13,6 @@ async function main() {
     return
   }
 
-  // encripta a senha antes de salvar
   const hash = await bcrypt.hash('123456', 10)
 
   await prisma.usuario.create({
