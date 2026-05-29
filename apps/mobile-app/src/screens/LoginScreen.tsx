@@ -20,6 +20,7 @@ import { RootStackParamList } from '../../App';
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
+  // estados inicializados vazios por seguranca
   const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -37,8 +38,8 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       // sanitiza espacos vazios do usuario antes do envio
       const res = await api.post('/auth/login', {
-        username: usuario.trim(),
-        password: senha
+        login: usuario.trim(),
+        senha
       });
 
       const data = res.data;

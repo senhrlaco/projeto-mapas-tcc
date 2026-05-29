@@ -4,22 +4,28 @@ import bcrypt from 'bcrypt'
 const prisma = new PrismaClient()
 
 async function main() {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    console.error('Seed cancelado: variavel de ambiente ADMIN_PASSWORD nao definida.');
+    return;
+  }
+
   const jaExiste = await prisma.usuario.findUnique({
-    where: { username: 'lucas.mello' },
+    where: { login: 'admin' },
   })
 
   if (jaExiste) {
-    console.log('Seed: usuario lucas.mello ja existe, pulando.')
+    console.log('Seed: usuario admin ja existe, pulando.')
     return
   }
 
-  const hash = await bcrypt.hash('123456', 10)
+  const hash = await bcrypt.hash(adminPassword, 10)
 
   await prisma.usuario.create({
     data: {
-      username: 'lucas.mello',
+      login:    'admin',
       password: hash,
-      nome:     'Lucas Mello (Admin)',
+      nome:     'Administrador Master',
       role:     'ADM_MASTER',
     },
   })

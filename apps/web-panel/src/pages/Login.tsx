@@ -13,7 +13,7 @@ export default function Login() {
     // previne o reload padrao do form
     e.preventDefault()
     setErro('')
-    
+
     if (!usuario.trim() || !senha.trim()) {
       setErro('Preencha todos os campos')
       return
@@ -23,12 +23,12 @@ export default function Login() {
 
     try {
       const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-      
+
       // sanitiza usuario e envia credenciais
       const res = await fetch(`${baseURL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: usuario.trim(), password: senha }),
+        body: JSON.stringify({ login: usuario.trim(), senha }),
       })
 
       const data = await res.json()
@@ -63,7 +63,7 @@ export default function Login() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
             <input
               type="text"
-              placeholder="ex: lucas.mello"
+              placeholder="ex: usuario123"
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

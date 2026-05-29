@@ -9,11 +9,12 @@ const prisma = new PrismaClient()
 
 // POST /api/auth/login — valida credenciais e devolve token
 router.post('/login', async (req: Request, res: Response) => {
-  const { username, password } = req.body
+  // mapeia a chave para login conforme exigencia do prisma
+  const { login, senha } = req.body
 
   try {
     const usuario = await prisma.usuario.findUnique({
-      where: { username },
+      where: { login },
     })
 
     if (!usuario) {
@@ -21,7 +22,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // compara a senha digitada com o hash salvo
-    const senhaValida = await bcrypt.compare(password, usuario.password)
+    const senhaValida = await bcrypt.compare(senha, usuario.password)
 
     if (!senhaValida) {
       return res.status(401).json({ error: 'Senha incorreta.' })

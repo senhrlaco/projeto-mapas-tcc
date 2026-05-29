@@ -78,7 +78,7 @@ app.get('/usuarios', verificarToken, async (req: any, res: any) => {
       return res.status(403).json({ error: 'Acesso negado para agentes' });
     }
     const usuarios = await prisma.usuario.findMany({
-      select: { id: true, nome: true, username: true, role: true, createdAt: true },
+      select: { id: true, nome: true, login: true, role: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     return res.json(usuarios);
@@ -106,7 +106,7 @@ app.post('/usuarios', verificarToken, async (req: any, res: any) => {
     const usuario = await prisma.usuario.create({
       data: {
         nome: name,
-        username: email,
+        login: email,
         password: hashedPassword,
         role: role ?? 'AGENTE',
       },
@@ -148,7 +148,7 @@ app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
       where: { id },
       data: {
         nome: name,
-        username: email,
+        login: email,
         role,
       },
     });
