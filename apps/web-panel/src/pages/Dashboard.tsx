@@ -3,7 +3,9 @@ import { useNavigate, Navigate } from 'react-router-dom'
 import { Map, Marker, Popup } from 'react-map-gl/mapbox'
 import useSWR from 'swr'
 import 'mapbox-gl/dist/mapbox-gl.css'
-
+// importa instancia do axios e define o fetcher para o swr
+import { api } from '../services/api'
+import { fetcher } from '../lib/fetcher'
 
 type Cliente = {
   id: string
