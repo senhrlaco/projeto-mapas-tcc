@@ -13,10 +13,22 @@ export const api = axios.create({
   },
 });
 
+import * as SecureStore from 'expo-secure-store';
+
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // rastreador de rota exata no terminal
     console.log(`[REQ] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+
+    try {
+      const token = await SecureStore.getItemAsync('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (err) {
+      console.log('[API] erro ao ler token', err);
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

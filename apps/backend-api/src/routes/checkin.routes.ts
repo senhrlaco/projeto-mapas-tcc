@@ -14,6 +14,7 @@ async function verificarTokenCheckin(req: any, res: any, next: any) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
     req.usuario = decoded;
+    // permite que agentes criem checkins livremente
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token invalido' });

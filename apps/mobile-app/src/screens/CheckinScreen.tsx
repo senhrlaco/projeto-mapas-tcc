@@ -729,10 +729,12 @@ export default function CheckinScreen() {
             <View style={styles.separador} />
 
             {/* adiciona rolagem para evitar corte do botao vermelho */}
+            {/* ativa scroll aninhado no bottom sheet */}
             <ScrollView
               contentContainerStyle={{ paddingBottom: 60 }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
             >
               {/* alerta de fraude: exibido quando gps simulado e detectado */}
               {gpsIsMocked && (
@@ -845,6 +847,7 @@ export default function CheckinScreen() {
               data={clientes}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ padding: 16 }}
+              nestedScrollEnabled={true}
               renderItem={({ item }) => (
                 <View style={styles.modalCard}>
                   <Text style={styles.modalCardTitle}>{item.nome}</Text>
