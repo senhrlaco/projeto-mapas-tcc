@@ -23,6 +23,7 @@ import {
 
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { useAuth } from '../contexts/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../services/api';
@@ -148,8 +149,9 @@ function detectarGpsFake(posicao: Location.LocationObject): boolean {
 // ---------------------------------------------------------------------------
 
 
-export default function CheckinScreen({ route }: Props) {
-  const { userId } = route.params;
+export default function CheckinScreen() {
+  const { user, signOut } = useAuth();
+  const userId = user?.id;
 
 
   const [posicaoUsuario, setPosicaoUsuario] = useState<Location.LocationObject | null>(null);
@@ -161,28 +163,31 @@ export default function CheckinScreen({ route }: Props) {
   const [atendimentoIniciado, setAtendimentoIniciado] = useState<boolean>(false);
   const [statusRelatorio, setStatusRelatorio] = useState<OpcaoRelatorio | null>(null);
 
-  useEffect(() => {
-    async function loadClientes() {
-      try {
-        const { data } = await api.get('/clientes');
-        const mapeados = data.map((c: any) => ({
-          id: c.id,
-          nome: c.name,
-          endereco: c.address,
-          servico: c.statusOperacional || 'Pendente',
-          latitude: c.latitude,
-          longitude: c.longitude,
-        }));
-        setClientes(mapeados);
-        if (mapeados.length > 0) {
-          setClienteSelecionado(mapeados[0]);
+  useFocusEffect(
+    useCallback(() => {
+      async function loadClientes() {
+        try {
+          // recarrega os clientes silenciosamente sempre que o mapa ganha foco
+          const { data } = await api.get('/clientes');
+          const mapeados = data.map((c: any) => ({
+            id: c.id,
+            nome: c.name,
+            endereco: c.address,
+            servico: c.statusOperacional || 'Pendente',
+            latitude: c.latitude,
+            longitude: c.longitude,
+          }));
+          setClientes(mapeados);
+          if (mapeados.length > 0) {
+            setClienteSelecionado((prev) => prev || mapeados[0]);
+          }
+        } catch (err) {
+          console.log('[API] erro ao buscar clientes', err);
         }
-      } catch (err) {
-        console.log('[API] erro ao buscar clientes', err);
       }
-    }
-    loadClientes();
-  }, []);
+      loadClientes();
+    }, [])
+  );
 
 
   // slideAnim: translateY da gaveta — parte fora da tela e anima para SNAP.ABERTA
@@ -629,6 +634,14 @@ export default function CheckinScreen({ route }: Props) {
         botao de atualizacao manual do gps — canto superior direito do mapa
         permite refrescar a coordenada sem sair da tela
       */}
+      <TouchableOpacity
+        style={[styles.botaoAtualizarGps, { left: 16, right: 'auto', backgroundColor: '#ef4444' }]}
+        activeOpacity={0.75}
+        onPress={signOut}
+      >
+        <Text style={[styles.botaoAtualizarGpsTexto, { color: '#ffffff' }]}>Sair</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.botaoAtualizarGps}
         activeOpacity={0.75}

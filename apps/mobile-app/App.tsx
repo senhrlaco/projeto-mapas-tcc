@@ -7,41 +7,59 @@ import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './src/screens/LoginScreen';
 import CheckinScreen from './src/screens/CheckinScreen';
 
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { ActivityIndicator, View } from 'react-native';
+
 export type RootStackParamList = {
   Login: undefined;
-  Checkin: {
-    userId: string;
-  };
+  Checkin: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function App() {
-  return (
-    <NavigationContainer>
-      <StatusBar style="light" />
+function Routes() {
+  const { user, isLoading } = useAuth();
 
-      <Stack.Navigator
-        initialRouteName="Login"
-        screenOptions={{
-          headerStyle: { backgroundColor: '#1d4ed8' },
-          headerTintColor: '#ffffff',
-          headerTitleStyle: { fontWeight: '700' },
-        }}
-      >
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' }}>
+        <ActivityIndicator size="large" color="#1d4ed8" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: '#1d4ed8' },
+        headerTintColor: '#ffffff',
+        headerTitleStyle: { fontWeight: '700' },
+      }}
+    >
+      {!user ? (
         <Stack.Screen
           name="Login"
           component={LoginScreen}
           options={{ title: 'Acesso ao Sistema' }}
         />
-
-        {/* header ocultado na tela de checkin: mapview ocupa tela inteira */}
+      ) : (
         <Stack.Screen
           name="Checkin"
           component={CheckinScreen}
           options={{ headerShown: false }}
         />
-      </Stack.Navigator>
+      )}
+    </Stack.Navigator>
+  );
+}
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <StatusBar style="light" />
+      <AuthProvider>
+        <Routes />
+      </AuthProvider>
     </NavigationContainer>
   );
 }

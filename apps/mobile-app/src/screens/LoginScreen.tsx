@@ -15,11 +15,14 @@ import * as SecureStore from 'expo-secure-store';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AxiosError } from 'axios';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
+  const { signIn } = useAuth();
+  
   // estados inicializados vazios por seguranca
   const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
@@ -44,10 +47,11 @@ export default function LoginScreen({ navigation }: Props) {
 
       const data = res.data;
 
-      await SecureStore.setItemAsync('token', data.token);
-
-      navigation.navigate('Checkin', {
-        userId: data.id ?? usuario,
+      // Chama a funcao do contexto para salvar token e navegar
+      await signIn(data.token, {
+        id: data.id ?? usuario,
+        nome: data.nome,
+        nivel: data.nivel,
       });
 
     } catch (error: any) {
