@@ -2,6 +2,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 
 // forca url literal para bypass do cache de env
+// adiciona prefixo global da api no mobile
 const BASE_URL = 'https://api-projeto-mapas.onrender.com/api';
 
 export const api = axios.create({
@@ -51,6 +52,7 @@ export interface CheckinResponse {
   idVisita: string;
 }
 
+// altera propriedade de controle de acesso para nivel
 export interface LoginPayload {
   name?: string;
   email: string;
