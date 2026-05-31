@@ -11,8 +11,6 @@ export type RootStackParamList = {
   Login: undefined;
   Checkin: {
     userId: string;
-    clientId: string;
-    clientName: string;
   };
 };
 

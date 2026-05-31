@@ -135,7 +135,7 @@ export default function Dashboard() {
     try {
       const [lng, lat] = selectedCoords
 
-      const res = await api.post('/clientes', {
+      await api.post('/clientes', {
         name: nomeCliente,
         address: enderecoCliente,
         latitude: lat,
