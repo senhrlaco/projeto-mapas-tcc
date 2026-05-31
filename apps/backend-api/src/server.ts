@@ -17,7 +17,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 
-app.use('/api/checkin', checkinRoutes);
+app.use(['/api/checkin', '/api/checkins'], checkinRoutes);
 
 app.get('/api/ping', async (req, res) => {
   try {

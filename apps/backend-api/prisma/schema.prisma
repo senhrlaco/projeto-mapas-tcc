@@ -45,6 +45,7 @@ model Client {
   createdAt         DateTime @default(now())
 
   visits    Visit[]
+  checkins  Checkin[]
 
   @@map("clients")
 }
@@ -127,6 +128,7 @@ model Checkin {
   createdAt      DateTime @default(now())
 
   colaborador    Usuario  @relation(fields: [colaboradorId], references: [id])
+  cliente        Client   @relation(fields: [clienteId], references: [id])
 
   @@index([colaboradorId, createdAt])
   @@map("checkins")

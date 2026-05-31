@@ -6,13 +6,15 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { fetcher } from '../lib/fetcher'
 
 import { api } from '../services/api'
-type Visita = {
+type Checkin = {
   id: string
   status: string
-  distanceToDest: number
-  serverTimestamp: string
-  user: { name: string }
-  client: { name: string }
+  latitude: number
+  longitude: number
+  observacao?: string
+  createdAt: string
+  colaborador: { nome: string }
+  cliente: { name: string }
 }
 
 type Cliente = {
@@ -67,13 +69,13 @@ export default function Dashboard() {
     error: clientesError,
   } = useSWR<Cliente[]>('/clientes', fetcher)
 
-  const { data: visitas = [], error: visitasError } = useSWR<Visita[]>(
-    '/visitas',
+  const { data: checkins = [], error: checkinsError } = useSWR<Checkin[]>(
+    '/checkins',
     fetcher,
     { refreshInterval: 10_000 },
   )
 
-  const erros = [pingError, clientesError, visitasError]
+  const erros = [pingError, clientesError, checkinsError]
   const erroDeAutenticacao = erros.some(
     (e) => e && ((e as Error & { status?: number }).status === 401 || (e as Error & { status?: number }).status === 403),
   )
@@ -192,9 +194,9 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-5">
-          <p className="text-sm text-gray-500">Visitas Recentes</p>
-          <p className="text-3xl font-bold text-gray-800 mt-1">{visitas.length}</p>
-          <p className="text-xs text-gray-400 mt-1">ultimas 50 registradas</p>
+          <p className="text-sm text-gray-500">Check-ins Recentes</p>
+          <p className="text-3xl font-bold text-gray-800 mt-1">{checkins.length}</p>
+          <p className="text-xs text-gray-400 mt-1">historico de operacoes</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-5">
@@ -329,42 +331,56 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {visitas.length > 0 && (
+      {checkins.length > 0 && (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-700">Ultimas Visitas</p>
+          <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center">
+            <p className="text-sm font-semibold text-gray-700">Tabela de Auditoria (Check-ins)</p>
           </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left">
+                <th className="px-5 py-3 font-semibold text-gray-600">Data / Hora</th>
                 <th className="px-5 py-3 font-semibold text-gray-600">Agente</th>
                 <th className="px-5 py-3 font-semibold text-gray-600">Cliente</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Local Exato (GPS)</th>
                 <th className="px-5 py-3 font-semibold text-gray-600">Status</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Distancia</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Horario</th>
+                <th className="px-5 py-3 font-semibold text-gray-600">Observacao</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {visitas.map((v) => (
+              {checkins.map((v) => (
                 <tr key={v.id}>
-                  {/* previne crash se status for nulo */}
-                  <td className="px-5 py-3 text-gray-800 font-medium">{v.user?.name || 'Sistema'}</td>
-                  <td className="px-5 py-3 text-gray-500">{v.client?.name || 'Desconhecido'}</td>
+                  <td className="px-5 py-3 text-gray-600 text-xs">
+                    {new Date(v.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                  </td>
+                  <td className="px-5 py-3 text-gray-800 font-medium">{v.colaborador?.nome || 'Sistema'}</td>
+                  <td className="px-5 py-3 text-gray-500">{v.cliente?.name || 'Desconhecido'}</td>
+                  <td className="px-5 py-3">
+                    {/* gera link dinamico de geolocalizacao para auditoria do gestor */}
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${v.latitude},${v.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 hover:underline font-semibold text-xs"
+                    >
+                      Ver no Mapa
+                    </a>
+                  </td>
                   <td className="px-5 py-3">
                     <span className={
-                      'text-xs font-semibold px-2 py-1 rounded-full ' +
-                      (v.status === 'VALIDO'
-                        ? 'bg-green-100 text-green-700'
-                        : v.status === 'FORA_DA_CERCA'
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-red-100 text-red-600')
+                      'text-[10px] font-bold px-2 py-1 rounded tracking-wider uppercase ' +
+                      (v.status === 'TOKEN_ENTREGUE' || v.status === 'VALIDO'
+                        ? 'bg-green-100 text-green-800'
+                        : v.status === 'NECESSITA_DOCUMENTACAO'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-blue-100 text-blue-800')
                     }>
                       {v.status}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{Math.round(v.distanceToDest)} m</td>
-                  <td className="px-5 py-3 text-gray-400 text-xs">
-                    {new Date(v.serverTimestamp).toLocaleString('pt-BR')}
+                  <td className="px-5 py-3 text-gray-600 italic">
+                    {/* renderiza a nota da operacao caso exista */}
+                    {v.observacao || '-'}
                   </td>
                 </tr>
               ))}

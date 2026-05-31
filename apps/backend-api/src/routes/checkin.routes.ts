@@ -74,4 +74,21 @@ router.post('/', verificarTokenCheckin, async (req: any, res: any) => {
   }
 });
 
+router.get('/', verificarTokenCheckin, async (req: any, res: any) => {
+  try {
+    // inclui os relacionamentos de agente e cliente na query
+    const checkins = await prisma.checkin.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        colaborador: { select: { nome: true } },
+        cliente: { select: { name: true } },
+      },
+    });
+    return res.json(checkins);
+  } catch (error) {
+    console.error('[checkin.routes] Erro ao buscar check-ins:', error);
+    return res.status(500).json({ error: 'Erro ao buscar historico de check-ins.' });
+  }
+});
+
 export default router;
