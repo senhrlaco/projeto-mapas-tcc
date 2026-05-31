@@ -19,6 +19,9 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  TextInput,
+  Modal,
+  FlatList,
 } from 'react-native';
 
 import * as Location from 'expo-location';
@@ -51,20 +54,18 @@ type EstadoGps =
   | 'erro';
 
 type OpcaoRelatorio =
-  | 'VISITA_REALIZADA'
-  | 'ENTREGA_REALIZADA'
   | 'TOKEN_ENTREGUE'
-  | 'FALTA_DOCUMENTOS';
+  | 'NECESSITA_DOCUMENTACAO'
+  | 'PENDENTE';
 
 // payload enviado ao back-end no registro de visita
 type PayloadCheckin = {
-  userId: string;
-  clientId: string;
-  capturedLat: number;
-  capturedLng: number;
-  gpsAccuracy: number;
+  clienteId: string;
+  latitude: number;
+  longitude: number;
   isMocked: boolean;
-  statusOperacional: string;
+  status: string;
+  observacao?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -102,24 +103,21 @@ const REGIAO_INICIAL: Region = {
 };
 
 const ROTULOS_RELATORIO: Record<OpcaoRelatorio, string> = {
-  VISITA_REALIZADA: 'Visita Realizada',
-  ENTREGA_REALIZADA: 'Entrega Realizada',
   TOKEN_ENTREGUE: 'Token Entregue',
-  FALTA_DOCUMENTOS: 'Falta de Documentos',
+  NECESSITA_DOCUMENTACAO: 'Necessita Documentacao',
+  PENDENTE: 'Pendente',
 };
 
 const COR_RELATORIO: Record<OpcaoRelatorio, string> = {
-  VISITA_REALIZADA: '#16a34a',
-  ENTREGA_REALIZADA: '#16a34a',
-  TOKEN_ENTREGUE: '#1d4ed8',
-  FALTA_DOCUMENTOS: '#dc2626',
+  TOKEN_ENTREGUE: '#16a34a', // Verde
+  NECESSITA_DOCUMENTACAO: '#f59e0b', // Amarelo/Laranja
+  PENDENTE: '#3b82f6', // Azul
 };
 
 const OPCOES_RELATORIO: OpcaoRelatorio[] = [
-  'VISITA_REALIZADA',
-  'ENTREGA_REALIZADA',
   'TOKEN_ENTREGUE',
-  'FALTA_DOCUMENTOS',
+  'NECESSITA_DOCUMENTACAO',
+  'PENDENTE',
 ];
 
 // ---------------------------------------------------------------------------
@@ -162,6 +160,8 @@ export default function CheckinScreen() {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteAtendimento | null>(null);
   const [atendimentoIniciado, setAtendimentoIniciado] = useState<boolean>(false);
   const [statusRelatorio, setStatusRelatorio] = useState<OpcaoRelatorio | null>(null);
+  const [notaOpcional, setNotaOpcional] = useState<string>('');
+  const [mostrarLista, setMostrarLista] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -311,18 +311,18 @@ export default function CheckinScreen() {
   async function enviarCheckin(statusVisita: OpcaoRelatorio): Promise<void> {
     if (!posicaoUsuario || !clienteSelecionado) return;
 
-    // alinhamento de contrato payload
+    // constroi o payload estrito garantindo tipos
     const body: PayloadCheckin = {
-      userId: 'colab-lucas-001',
-      clientId: clienteSelecionado.id,
-      capturedLat: posicaoUsuario.coords.latitude,
-      capturedLng: posicaoUsuario.coords.longitude,
-      gpsAccuracy: posicaoUsuario.coords.accuracy ?? 10,
+      clienteId: clienteSelecionado.id,
+      latitude: posicaoUsuario.coords.latitude,
+      longitude: posicaoUsuario.coords.longitude,
       isMocked: gpsIsMocked,
-      statusOperacional: statusVisita,
+      status: statusVisita,
+      observacao: notaOpcional,
     };
 
     setEnviando(true);
+    console.log('[MOBILE_PAYLOAD]', body);
 
     try {
       const resposta = await api.post('/checkin', body);
@@ -352,18 +352,10 @@ export default function CheckinScreen() {
 
       Alert.alert('Falha no Check-in', mensagemServidor, [{ text: 'OK' }]);
 
-    } catch (error: any) {
-      // tratamento de erro nativo
-      if (error.response) {
-        Alert.alert('Falha no Check-in', error.response.data?.error || 'Erro no servidor', [{ text: 'OK' }]);
-      } else {
-        // falha de rede ou servidor inacessivel
-        Alert.alert(
-          'Erro de Conexao',
-          'Nao foi possivel conectar ao servidor. Verifique sua rede e tente novamente.',
-          [{ text: 'OK' }],
-        );
-      }
+    } catch (err: any) {
+      // expoe o erro real da api no alert
+      const erroReal = err.response?.data?.error || err.response?.data?.message || 'Erro de conexao';
+      Alert.alert('Falha no Check-in', erroReal, [{ text: 'OK' }]);
     } finally {
       setEnviando(false);
     }
@@ -524,6 +516,36 @@ export default function CheckinScreen() {
     }
 
     // Estado C: atendimento em curso, exibir opcoes de relatorio
+    if (statusRelatorio === 'NECESSITA_DOCUMENTACAO' || statusRelatorio === 'PENDENTE') {
+      return (
+        <View style={styles.relatorioContainer}>
+          <Text style={styles.relatorioTitulo}>Observação Adicional</Text>
+          {/* renderiza campo de comentario opcional estilo monday */}
+          <TextInput
+            style={styles.inputObservacao}
+            placeholder="Adicionar observação (opcional)"
+            placeholderTextColor="#94a3b8"
+            value={notaOpcional}
+            onChangeText={setNotaOpcional}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.botaoConfirmarChegada, enviando && styles.botaoDesabilitado]}
+            disabled={enviando}
+            onPress={() => enviarCheckin(statusRelatorio)}
+          >
+            <Text style={styles.botaoPrincipalTexto}>Confirmar Envio</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.botaoCancelarSecundario}
+            onPress={() => setStatusRelatorio(null)}
+          >
+            <Text style={styles.botaoCancelarSecundarioTexto}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.relatorioContainer}>
         <Text style={styles.relatorioTitulo}>Resultado do atendimento</Text>
@@ -537,7 +559,13 @@ export default function CheckinScreen() {
             ]}
             activeOpacity={enviando ? 1 : 0.75}
             disabled={enviando}
-            onPress={() => registrarStatus(opcao)}
+            onPress={() => {
+              if (opcao === 'NECESSITA_DOCUMENTACAO' || opcao === 'PENDENTE') {
+                setStatusRelatorio(opcao);
+              } else {
+                enviarCheckin(opcao);
+              }
+            }}
           >
             <Text style={styles.botaoRelatorioTexto}>{ROTULOS_RELATORIO[opcao]}</Text>
           </TouchableOpacity>
@@ -643,6 +671,14 @@ export default function CheckinScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        style={[styles.botaoAtualizarGps, { top: 64, left: 16, right: 'auto', backgroundColor: '#3b82f6' }]}
+        activeOpacity={0.75}
+        onPress={() => setMostrarLista(true)}
+      >
+        <Text style={[styles.botaoAtualizarGpsTexto, { color: '#ffffff' }]}>Ver Lista</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={styles.botaoAtualizarGps}
         activeOpacity={0.75}
         disabled={estadoGps === 'capturando' || estadoGps === 'solicitando_permissao'}
@@ -692,7 +728,9 @@ export default function CheckinScreen() {
 
             <View style={styles.separador} />
 
+            {/* adiciona rolagem para evitar corte do botao vermelho */}
             <ScrollView
+              contentContainerStyle={{ paddingBottom: 60 }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
@@ -793,6 +831,39 @@ export default function CheckinScreen() {
         </SafeAreaView>
       </Animated.View>
 
+      {/* renderiza a lista sobreposta ao mapa */}
+      {mostrarLista && (
+        <Modal visible={mostrarLista} animationType="slide">
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Lista de Clientes</Text>
+              <TouchableOpacity onPress={() => setMostrarLista(false)}>
+                <Text style={styles.modalClose}>Voltar ao Mapa</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={clientes}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16 }}
+              renderItem={({ item }) => (
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalCardTitle}>{item.nome}</Text>
+                  <Text style={styles.modalCardAddress}>{item.endereco}</Text>
+                  <TouchableOpacity
+                    style={styles.modalCardButton}
+                    onPress={() => {
+                      selecionarCliente(item);
+                      setMostrarLista(false);
+                    }}
+                  >
+                    <Text style={styles.modalCardButtonText}>Selecionar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          </SafeAreaView>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1109,6 +1180,90 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#0f172a',
+  },
+
+  inputObservacao: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#334155',
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+
+  botaoCancelarSecundario: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+
+  botaoCancelarSecundarioTexto: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+
+  modalClose: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1d4ed8',
+  },
+
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  modalCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+
+  modalCardAddress: {
+    fontSize: 13,
+    color: '#64748b',
+    marginBottom: 12,
+  },
+
+  modalCardButton: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+
+  modalCardButtonText: {
+    color: '#1d4ed8',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   seletorTitulo: {

@@ -123,6 +123,7 @@ model Checkin {
   isMocked       Boolean
   status         String
   alertaGeofence Boolean
+  observacao     String?
   createdAt      DateTime @default(now())
 
   colaborador    Usuario  @relation(fields: [colaboradorId], references: [id])

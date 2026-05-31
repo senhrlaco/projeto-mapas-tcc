@@ -2,9 +2,23 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { haversine } from '../utils/haversine';
+import jwt from 'jsonwebtoken';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// middleware de validacao do token exclusivo para o roteador de checkin
+async function verificarTokenCheckin(req: any, res: any, next: any) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Nao autorizado' });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    req.usuario = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Token invalido' });
+  }
+}
 
 // destino fixo para simulacao — substituir por busca no banco
 const DESTINO_SIMULADO = {
@@ -15,9 +29,10 @@ const DESTINO_SIMULADO = {
 
 const RAIO_MAXIMO_METROS = 100;
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', verificarTokenCheckin, async (req: any, res: any) => {
   try {
-    const { colaboradorId, clienteId, latitude, longitude, isMocked } = req.body;
+    const { clienteId, latitude, longitude, status, observacao, isMocked } = req.body;
+    const colaboradorId = req.usuario.id;
 
     // gps simulado e tratado como fraude — rejeita imediatamente
     if (isMocked === true) {
@@ -35,7 +50,7 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     const alertaGeofence = distanciaMetros > RAIO_MAXIMO_METROS;
-    const status = alertaGeofence ? 'FORA_DA_CERCA' : 'VALIDO';
+    const statusGeofence = alertaGeofence ? 'FORA_DA_CERCA' : 'VALIDO';
 
     const checkin = await prisma.checkin.create({
       data: {
@@ -44,8 +59,9 @@ router.post('/', async (req: Request, res: Response) => {
         latitude,
         longitude,
         isMocked,
-        status,
+        status: status || statusGeofence,
         alertaGeofence,
+        observacao,
       },
     });
 
