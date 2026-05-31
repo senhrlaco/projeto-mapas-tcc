@@ -42,6 +42,7 @@ type ClienteAtendimento = {
   nome: string;
   endereco: string;
   servico: string;
+  status: OpcaoRelatorio;
   latitude: number;
   longitude: number;
 };
@@ -169,14 +170,18 @@ export default function CheckinScreen() {
         try {
           // recarrega os clientes silenciosamente sempre que o mapa ganha foco
           const { data } = await api.get('/clientes');
-          const mapeados = data.map((c: any) => ({
-            id: c.id,
-            nome: c.name,
-            endereco: c.address,
-            servico: c.statusOperacional || 'Pendente',
-            latitude: c.latitude,
-            longitude: c.longitude,
-          }));
+          const mapeados = data.map((c: any) => {
+            const rawStatus = c.statusOperacional || 'PENDENTE';
+            return {
+              id: c.id,
+              nome: c.name,
+              endereco: c.address,
+              status: rawStatus as OpcaoRelatorio,
+              servico: ROTULOS_RELATORIO[rawStatus as OpcaoRelatorio] || 'Pendente',
+              latitude: c.latitude,
+              longitude: c.longitude,
+            }
+          });
           setClientes(mapeados);
           if (mapeados.length > 0) {
             setClienteSelecionado((prev) => prev || mapeados[0]);
@@ -632,7 +637,7 @@ export default function CheckinScreen() {
                 coordinate={{ latitude: cliente.latitude, longitude: cliente.longitude }}
                 title={cliente.nome}
                 description={cliente.servico}
-                pinColor={selecionado ? '#16a34a' : '#64748b'}
+                pinColor={selecionado ? COR_RELATORIO[cliente.status] || '#16a34a' : '#64748b'}
                 onPress={() => selecionarCliente(cliente)}
               />
               <Circle
@@ -751,7 +756,16 @@ export default function CheckinScreen() {
 
                 <View style={styles.linhaInfo}>
                   <Text style={styles.linhaInfoRotulo}>Servico</Text>
-                  <Text style={styles.linhaInfoValor}>{clienteSelecionado?.servico}</Text>
+                  <View style={{
+                    backgroundColor: clienteSelecionado?.status ? COR_RELATORIO[clienteSelecionado.status] : '#3b82f6',
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                  }}>
+                    <Text style={[styles.linhaInfoValor, { color: '#ffffff', fontWeight: 'bold', fontSize: 10, textTransform: 'uppercase' }]}>
+                      {clienteSelecionado?.servico}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.linhaInfo}>

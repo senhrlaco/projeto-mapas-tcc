@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Usuarios from './pages/Usuarios'
+import Auditoria from './pages/Auditoria'
 import Login from './pages/Login'
 
 function PrivateRoute() {
@@ -49,7 +50,21 @@ function Layout() {
           </NavLink>
 
           {loggedUser?.nivel !== 'AGENTE' && (
-            <NavLink
+            <>
+              {/* adiciona item de auditoria no menu principal */}
+              <NavLink
+                to="/auditoria"
+                className={({ isActive }) =>
+                  'px-3 py-2 rounded text-sm ' +
+                  (isActive
+                    ? 'bg-blue-600 text-white font-medium'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white')
+                }
+              >
+                Auditoria
+              </NavLink>
+
+              <NavLink
               to="/usuarios"
               className={({ isActive }) =>
                 'px-3 py-2 rounded text-sm ' +
@@ -59,7 +74,8 @@ function Layout() {
               }
             >
               Usuarios
-            </NavLink>
+              </NavLink>
+            </>
           )}
         </nav>
 
@@ -90,6 +106,7 @@ export default function App() {
         <Route element={<PrivateRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/auditoria" element={<Auditoria />} />
             <Route path="/usuarios" element={<Usuarios />} />
           </Route>
         </Route>

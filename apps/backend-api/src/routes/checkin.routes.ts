@@ -66,6 +66,12 @@ router.post('/', verificarTokenCheckin, async (req: any, res: any) => {
       },
     });
 
+    // atualiza o status master do cliente ao receber checkin da rua
+    await prisma.client.update({
+      where: { id: clienteId },
+      data: { statusOperacional: status || statusGeofence },
+    });
+
     return res.status(201).json(checkin);
 
   } catch (error) {

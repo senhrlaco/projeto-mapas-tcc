@@ -249,27 +249,34 @@ app.delete('/api/clientes/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/clientes/:id/status', async (req, res) => {
+app.patch('/api/clientes/:id/status', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    const { statusOperacional } = req.body;
+    const { status, statusOperacional } = req.body;
+    
+    // Suporta ambas as nomenclaturas de payload
+    const novoStatus = status || statusOperacional;
 
-    const statusPermitidos = ['PENDENTE', 'VISITA_REALIZADA', 'ENTREGA_REALIZADA', 'TOKEN_ENTREGUE', 'FALTA_DOCUMENTOS'];
+    if (req.usuario.nivel === 'AGENTE') {
+      return res.status(403).json({ error: 'Acesso negado para agentes' });
+    }
 
-    if (!statusPermitidos.includes(statusOperacional)) {
+    const statusPermitidos = ['PENDENTE', 'NECESSITA_DOCUMENTACAO', 'TOKEN_ENTREGUE'];
+
+    if (!statusPermitidos.includes(novoStatus)) {
       return res.status(400).json({ error: 'status invalido' });
     }
 
     // atualiza status do cliente via painel web
     const cliente = await prisma.client.update({
       where: { id },
-      data: { statusOperacional }
+      data: { statusOperacional: novoStatus }
     });
 
     return res.status(200).json(cliente);
-  } catch (error: any) {
+  } catch (error) {
     console.error('[PATCH /clientes/:id/status]', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Erro ao atualizar status do cliente' });
   }
 });
 

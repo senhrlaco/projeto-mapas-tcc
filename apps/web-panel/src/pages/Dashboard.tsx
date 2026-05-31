@@ -3,19 +3,7 @@ import { useNavigate, Navigate } from 'react-router-dom'
 import { Map, Marker, Popup } from 'react-map-gl/mapbox'
 import useSWR from 'swr'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { fetcher } from '../lib/fetcher'
 
-import { api } from '../services/api'
-type Checkin = {
-  id: string
-  status: string
-  latitude: number
-  longitude: number
-  observacao?: string
-  createdAt: string
-  colaborador: { nome: string }
-  cliente: { name: string }
-}
 
 type Cliente = {
   id: string
@@ -67,15 +55,12 @@ export default function Dashboard() {
     data: clientes = [],
     mutate: mutateClientes,
     error: clientesError,
-  } = useSWR<Cliente[]>('/clientes', fetcher)
+  } = useSWR<Cliente[]>('/clientes', fetcher, {
+    // atualiza silenciosamente o mapa do gestor a cada dez segundos
+    refreshInterval: 10000
+  })
 
-  const { data: checkins = [], error: checkinsError } = useSWR<Checkin[]>(
-    '/checkins',
-    fetcher,
-    { refreshInterval: 10_000 },
-  )
-
-  const erros = [pingError, clientesError, checkinsError]
+  const erros = [pingError, clientesError]
   const erroDeAutenticacao = erros.some(
     (e) => e && ((e as Error & { status?: number }).status === 401 || (e as Error & { status?: number }).status === 403),
   )
@@ -193,10 +178,9 @@ export default function Dashboard() {
           <p className="text-xs text-gray-400 mt-1">registros ativos no banco</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-5">
-          <p className="text-sm text-gray-500">Check-ins Recentes</p>
-          <p className="text-3xl font-bold text-gray-800 mt-1">{checkins.length}</p>
-          <p className="text-xs text-gray-400 mt-1">historico de operacoes</p>
+        <div className="bg-white rounded-lg shadow-md p-5 flex flex-col justify-center">
+          <p className="text-sm text-gray-500 font-semibold">Visao Geral da Operacao</p>
+          <p className="text-xs text-gray-400 mt-2">Graficos em breve</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-5">
@@ -256,10 +240,10 @@ export default function Dashboard() {
                       {/* renderiza badge de status no mapa */}
                       <div className="mt-1">
                         <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${
-                          selectedMarker.statusOperacional === 'FALTA_DOCUMENTOS'
-                            ? 'bg-red-100 text-red-800'
+                          selectedMarker.statusOperacional === 'NECESSITA_DOCUMENTACAO'
+                            ? 'bg-orange-100 text-orange-800'
                             : selectedMarker.statusOperacional === 'PENDENTE' || !selectedMarker.statusOperacional
-                            ? 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-blue-100 text-blue-800'
                             : 'bg-green-100 text-green-800'
                         }`}>
                           {selectedMarker.statusOperacional || 'PENDENTE'}
@@ -284,7 +268,7 @@ export default function Dashboard() {
 
                           try {
                             await api.patch(`/clientes/${clienteAtualizado.id}/status`, {
-                              statusOperacional: novoStatus
+                              status: novoStatus
                             })
 
                             // revalida cache do swr para atualizar as cores do mapa
@@ -296,10 +280,8 @@ export default function Dashboard() {
                         }}
                       >
                         <option value="PENDENTE">Pendente</option>
-                        <option value="VISITA_REALIZADA">Visita Realizada</option>
-                        <option value="ENTREGA_REALIZADA">Entrega Realizada</option>
+                        <option value="NECESSITA_DOCUMENTACAO">Necessita Documentacao</option>
                         <option value="TOKEN_ENTREGUE">Token Entregue</option>
-                        <option value="FALTA_DOCUMENTOS">Falta de Documentos</option>
                       </select>
                     </div>
 
@@ -331,63 +313,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {checkins.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center">
-            <p className="text-sm font-semibold text-gray-700">Tabela de Auditoria (Check-ins)</p>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-left">
-                <th className="px-5 py-3 font-semibold text-gray-600">Data / Hora</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Agente</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Cliente</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Local Exato (GPS)</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Status</th>
-                <th className="px-5 py-3 font-semibold text-gray-600">Observacao</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {checkins.map((v) => (
-                <tr key={v.id}>
-                  <td className="px-5 py-3 text-gray-600 text-xs">
-                    {new Date(v.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                  </td>
-                  <td className="px-5 py-3 text-gray-800 font-medium">{v.colaborador?.nome || 'Sistema'}</td>
-                  <td className="px-5 py-3 text-gray-500">{v.cliente?.name || 'Desconhecido'}</td>
-                  <td className="px-5 py-3">
-                    {/* gera link dinamico de geolocalizacao para auditoria do gestor */}
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${v.latitude},${v.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 hover:underline font-semibold text-xs"
-                    >
-                      Ver no Mapa
-                    </a>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={
-                      'text-[10px] font-bold px-2 py-1 rounded tracking-wider uppercase ' +
-                      (v.status === 'TOKEN_ENTREGUE' || v.status === 'VALIDO'
-                        ? 'bg-green-100 text-green-800'
-                        : v.status === 'NECESSITA_DOCUMENTACAO'
-                        ? 'bg-orange-100 text-orange-800'
-                        : 'bg-blue-100 text-blue-800')
-                    }>
-                      {v.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-gray-600 italic">
-                    {/* renderiza a nota da operacao caso exista */}
-                    {v.observacao || '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+
 
       {modalClienteAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
