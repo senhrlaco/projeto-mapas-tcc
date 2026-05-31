@@ -7,7 +7,7 @@ provider = "postgresql"
 url      = env("DATABASE_URL")
 }
 
-enum Role {
+enum Nivel {
   ADMIN
   SUPERVISOR
   COLABORADOR
@@ -24,7 +24,7 @@ model User {
   name      String
   email     String    @unique
   password  String    // hash bcrypt
-  role      Role      @default(COLABORADOR)
+  nivel     Nivel     @default(COLABORADOR)
   active    Boolean   @default(true)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

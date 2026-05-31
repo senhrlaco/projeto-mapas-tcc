@@ -10,19 +10,16 @@ async function main() {
     return;
   }
 
-  const jaExiste = await prisma.usuario.findUnique({
-    where: { login: 'admin' },
-  })
-
-  if (jaExiste) {
-    console.log('Seed: usuario admin ja existe, pulando.')
-    return
-  }
-
   const hash = await bcrypt.hash(adminPassword, 10)
 
-  await prisma.usuario.create({
-    data: {
+  // sobrescreve credenciais e nivel de acesso caso o admin ja exista
+  await prisma.usuario.upsert({
+    where: { login: 'admin' },
+    update: {
+      password: hash,
+      nivel: 'ADM_MASTER',
+    },
+    create: {
       login:    'admin',
       password: hash,
       nome:     'Administrador Master',
@@ -30,7 +27,7 @@ async function main() {
     },
   })
 
-  console.log('Seed: usuario ADM_MASTER criado com sucesso.')
+  console.log('Seed: usuario ADM_MASTER atualizado/criado com sucesso.')
 }
 
 main()
