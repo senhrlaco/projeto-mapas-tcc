@@ -469,17 +469,9 @@ export default function CheckinScreen() {
   // secao de acoes da gaveta com tres estados:
   // A: relatorio registrado, B: aguardando chegada, C: atendimento em curso
   function renderAcoesAtendimento(): React.ReactNode {
-    // Estado A: relatorio ja registrado
-    if (statusRelatorio !== null) {
-      return (
-        <View style={styles.relatorioRegistrado}>
-          <Text style={styles.relatorioRegistradoRotulo}>Status registrado</Text>
-          <Text style={styles.relatorioRegistradoValor}>
-            {ROTULOS_RELATORIO[statusRelatorio]}
-          </Text>
-        </View>
-      );
-    }
+    // A armadilha original 'Estado A: relatorio ja registrado' foi removida porque 
+    // ela causava conflito de inferência de tipos (never) e engolia a renderização 
+    // do formulário de observação.
 
     // Estado B: aguardando confirmacao de chegada
     if (!atendimentoIniciado) {
@@ -520,30 +512,38 @@ export default function CheckinScreen() {
       );
     }
 
+    // forca exibicao do campo de texto com tratamento de case sensitive
+    const mostrarComentario = statusRelatorio?.toUpperCase() === 'PENDENTE' || 
+                              statusRelatorio?.toUpperCase() === 'NECESSITA_DOCUMENTACAO' || 
+                              (statusRelatorio as string) === 'Necessita Documentacao';
+
     // Estado C: atendimento em curso, exibir opcoes de relatorio
-    if (statusRelatorio === 'NECESSITA_DOCUMENTACAO' || statusRelatorio === 'PENDENTE') {
+    if (mostrarComentario) {
       return (
         <View style={styles.relatorioContainer}>
           <Text style={styles.relatorioTitulo}>Observação Adicional</Text>
           {/* renderiza campo de comentario opcional estilo monday */}
           <TextInput
             style={styles.inputObservacao}
-            placeholder="Adicionar observação (opcional)"
+            placeholder="Digite o motivo da pendência..."
             placeholderTextColor="#94a3b8"
             value={notaOpcional}
             onChangeText={setNotaOpcional}
-            multiline
+            multiline={true}
           />
           <TouchableOpacity
             style={[styles.botaoConfirmarChegada, enviando && styles.botaoDesabilitado]}
             disabled={enviando}
-            onPress={() => enviarCheckin(statusRelatorio)}
+            onPress={() => enviarCheckin(statusRelatorio!)}
           >
             <Text style={styles.botaoPrincipalTexto}>Confirmar Envio</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.botaoCancelarSecundario}
-            onPress={() => setStatusRelatorio(null)}
+            onPress={() => {
+              setStatusRelatorio(null);
+              setNotaOpcional('');
+            }}
           >
             <Text style={styles.botaoCancelarSecundarioTexto}>Voltar</Text>
           </TouchableOpacity>
@@ -1199,16 +1199,18 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
 
+  // garante que o campo tenha borda e altura para ser clicavel
   inputObservacao: {
-    backgroundColor: '#ffffff',
+    minHeight: 80,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 8,
     padding: 12,
+    backgroundColor: '#f8fafc',
+    marginTop: 10,
+    textAlignVertical: 'top',
     fontSize: 14,
     color: '#334155',
-    minHeight: 80,
-    textAlignVertical: 'top',
     marginBottom: 16,
   },
 
