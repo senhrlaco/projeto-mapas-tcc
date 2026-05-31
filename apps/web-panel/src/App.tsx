@@ -12,6 +12,14 @@ function PrivateRoute() {
 function Layout() {
   const navigate = useNavigate()
 
+  let loggedUser: any = null
+  const token = localStorage.getItem('@Savez:token')
+  if (token) {
+    try {
+      loggedUser = JSON.parse(atob(token.split('.')[1]))
+    } catch {}
+  }
+
   function sair() {
     localStorage.removeItem('@Savez:token')
     navigate('/login')
@@ -40,17 +48,19 @@ function Layout() {
             Dashboard
           </NavLink>
 
-          <NavLink
-            to="/usuarios"
-            className={({ isActive }) =>
-              'px-3 py-2 rounded text-sm ' +
-              (isActive
-                ? 'bg-blue-600 text-white font-medium'
-                : 'text-slate-300 hover:bg-slate-700 hover:text-white')
-            }
-          >
-            Usuarios
-          </NavLink>
+          {loggedUser?.nivel !== 'AGENTE' && (
+            <NavLink
+              to="/usuarios"
+              className={({ isActive }) =>
+                'px-3 py-2 rounded text-sm ' +
+                (isActive
+                  ? 'bg-blue-600 text-white font-medium'
+                  : 'text-slate-300 hover:bg-slate-700 hover:text-white')
+              }
+            >
+              Usuarios
+            </NavLink>
+          )}
         </nav>
 
         <div className="mt-auto border-t border-slate-700">

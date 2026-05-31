@@ -36,6 +36,14 @@ export default function Dashboard() {
 
   const [selectedMarker, setSelectedMarker] = useState<MarkerSelecionado>(null)
 
+  let loggedUser: any = null
+  const token = localStorage.getItem('@Savez:token')
+  if (token) {
+    try {
+      loggedUser = JSON.parse(atob(token.split('.')[1]))
+    } catch {}
+  }
+
   const [modalClienteAberto, setModalClienteAberto] = useState(false)
   const [nomeCliente, setNomeCliente] = useState('')
   const [enderecoCliente, setEnderecoCliente] = useState('')
@@ -78,6 +86,8 @@ export default function Dashboard() {
 
 
   function abrirModalCliente() {
+    // previne renderizacao do botao de cadastro de cliente para agentes
+    if (loggedUser?.nivel === 'AGENTE') return
     setNomeCliente('')
     setEnderecoCliente('')
     setErroGeocodificacao('')
@@ -164,12 +174,14 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-800">Visao Geral</h1>
           <p className="text-sm text-gray-500 mt-1">Resumo das operacoes de campo</p>
         </div>
-        <button
-          onClick={abrirModalCliente}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg"
-        >
-          Cadastrar Cliente
-        </button>
+        {loggedUser?.nivel !== 'AGENTE' && (
+          <button
+            onClick={abrirModalCliente}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+          >
+            Cadastrar Cliente
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-8">
