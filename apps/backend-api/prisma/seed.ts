@@ -26,7 +26,7 @@ async function main() {
       login:    'admin',
       password: hash,
       nome:     'Administrador Master',
-      role:     'ADM_MASTER',
+      nivel:     'ADM_MASTER',
     },
   })
 
