@@ -106,7 +106,7 @@ model Usuario {
   nome      String
   login     String    @unique
   password  String    // hash bcrypt, nunca texto puro
-  role      String    // ex: 'ADMIN', 'AGENTE'
+  nivel     String    // ex: 'ADMIN', 'AGENTE'
   createdAt DateTime  @default(now())
 
   checkins  Checkin[]

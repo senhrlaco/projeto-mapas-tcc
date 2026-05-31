@@ -65,7 +65,7 @@ async function verificarToken(req: any, res: any, next: any) {
   try {
     // valida assinatura do jwt
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-    req.user = decoded;
+    req.usuario = decoded;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token invalido' });
@@ -74,11 +74,11 @@ async function verificarToken(req: any, res: any, next: any) {
 app.get('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     // oculta painel para agentes
-    if (req.user.role === 'Agente') {
+    if (req.usuario.nivel === 'Agente') {
       return res.status(403).json({ error: 'Acesso negado para agentes' });
     }
     const usuarios = await prisma.usuario.findMany({
-      select: { id: true, nome: true, login: true, role: true, createdAt: true },
+      select: { id: true, nome: true, login: true, nivel: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     return res.json(usuarios);
@@ -90,11 +90,11 @@ app.get('/usuarios', verificarToken, async (req: any, res: any) => {
 
 app.post('/usuarios', verificarToken, async (req: any, res: any) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, nivel } = req.body;
 
     // bloqueia criacao de hierarquia superior
-    const pesoLogado = PESOS_RBAC[req.user.role] || 0;
-    const pesoAlvo = PESOS_RBAC[role] || 0;
+    const pesoLogado = PESOS_RBAC[req.usuario.nivel] || 0;
+    const pesoAlvo = PESOS_RBAC[nivel] || 0;
 
     if (pesoLogado <= pesoAlvo) {
       return res.status(403).json({ error: 'Privilegio insuficiente' });
@@ -108,7 +108,7 @@ app.post('/usuarios', verificarToken, async (req: any, res: any) => {
         nome: name,
         login: email,
         password: hashedPassword,
-        role: role ?? 'AGENTE',
+        nivel: nivel ?? 'Agente',
       },
     });
     return res.json(usuario);
@@ -130,15 +130,15 @@ const PESOS_RBAC: Record<string, number> = {
 app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    const { name, email, role } = req.body;
-    const loggedUser = req.user;
+    const { name, email, nivel } = req.body;
+    const loggedUser = req.usuario;
 
     const targetUser = await prisma.usuario.findUnique({ where: { id } });
     if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
 
     // valida hierarquia por sistema de pesos
-    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
-    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+    const pesoLogado = PESOS_RBAC[loggedUser.nivel] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.nivel] || 0;
 
     if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
       return res.status(403).json({ error: 'Sem permissao para editar este usuario' });
@@ -149,7 +149,7 @@ app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
       data: {
         nome: name,
         login: email,
-        role,
+        nivel,
       },
     });
     return res.json(usuario);
@@ -162,14 +162,14 @@ app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
 app.delete('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    const loggedUser = req.user;
+    const loggedUser = req.usuario;
 
     const targetUser = await prisma.usuario.findUnique({ where: { id } });
     if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
 
     // valida hierarquia por sistema de pesos
-    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
-    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+    const pesoLogado = PESOS_RBAC[loggedUser.nivel] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.nivel] || 0;
 
     if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
       return res.status(403).json({ error: 'Sem permissao para excluir este usuario' });
@@ -187,14 +187,14 @@ app.patch('/usuarios/:id/senha', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { novaSenha } = req.body;
-    const loggedUser = req.user;
+    const loggedUser = req.usuario;
 
     const targetUser = await prisma.usuario.findUnique({ where: { id } });
     if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
 
     // valida hierarquia por sistema de pesos
-    const pesoLogado = PESOS_RBAC[loggedUser.role] || 0;
-    const pesoAlvo = PESOS_RBAC[targetUser.role] || 0;
+    const pesoLogado = PESOS_RBAC[loggedUser.nivel] || 0;
+    const pesoAlvo = PESOS_RBAC[targetUser.nivel] || 0;
 
     if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
       return res.status(403).json({ error: 'Sem permissao para alterar senha deste usuario' });

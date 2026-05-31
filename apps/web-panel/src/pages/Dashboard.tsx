@@ -5,9 +5,7 @@ import useSWR from 'swr'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { fetcher } from '../lib/fetcher'
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
-
-
+import { api } from '../services/api'
 type Visita = {
   id: string
   status: string
@@ -53,16 +51,16 @@ export default function Dashboard() {
     zoom: 11,
   })
 
-  const { data: ping, error: pingError } = useSWR<RespostaPing>(`${baseURL}/ping`, fetcher)
+  const { data: ping, error: pingError } = useSWR<RespostaPing>('/ping', fetcher)
 
   const {
     data: clientes = [],
     mutate: mutateClientes,
     error: clientesError,
-  } = useSWR<Cliente[]>(`${baseURL}/clientes`, fetcher)
+  } = useSWR<Cliente[]>('/clientes', fetcher)
 
   const { data: visitas = [], error: visitasError } = useSWR<Visita[]>(
-    `${baseURL}/visitas`,
+    '/visitas',
     fetcher,
     { refreshInterval: 10_000 },
   )
@@ -77,12 +75,7 @@ export default function Dashboard() {
     return <Navigate to="/login" replace />
   }
 
-  function headersEscrita(): HeadersInit {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + localStorage.getItem('@Savez:token'),
-    }
-  }
+
 
   function abrirModalCliente() {
     setNomeCliente('')
@@ -142,32 +135,22 @@ export default function Dashboard() {
     try {
       const [lng, lat] = selectedCoords
 
-      const res = await fetch(`${baseURL}/clientes`, {
-        method: 'POST',
-        headers: headersEscrita(),
-        body: JSON.stringify({
-          name: nomeCliente,
-          address: enderecoCliente,
-          latitude: lat,
-          longitude: lng,
-        }),
+      const res = await api.post('/clientes', {
+        name: nomeCliente,
+        address: enderecoCliente,
+        latitude: lat,
+        longitude: lng,
       })
 
-      if (res.status === 401 || res.status === 403) {
+      mutateClientes()
+      fecharModalCliente()
+    } catch (err: any) {
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
         localStorage.removeItem('@Savez:token')
         navigate('/login')
         return
       }
-
-      if (!res.ok) {
-        setErroGeocodificacao('Nao foi possivel cadastrar o cliente no servidor.')
-        return
-      }
-
-      mutateClientes()
-      fecharModalCliente()
-    } catch {
-      setErroGeocodificacao('Falha de conexao. Verifique a rede e tente novamente.')
+      setErroGeocodificacao('Falha ao cadastrar cliente. Verifique a rede e tente novamente.')
     } finally {
       setSalvandoCliente(false)
     }
@@ -286,13 +269,9 @@ export default function Dashboard() {
                           mutateClientes(clientes.map(c => c.id === clienteAtualizado.id ? clienteAtualizado : c), false)
 
                           try {
-                            const res = await fetch(`${baseURL}/clientes/${clienteAtualizado.id}/status`, {
-                              method: 'PATCH',
-                              headers: headersEscrita(),
-                              body: JSON.stringify({ statusOperacional: novoStatus })
+                            await api.patch(`/clientes/${clienteAtualizado.id}/status`, {
+                              statusOperacional: novoStatus
                             })
-
-                            if (!res.ok) throw new Error('falha na atualizacao')
 
                             // revalida cache do swr para atualizar as cores do mapa
                             mutateClientes()
@@ -318,19 +297,12 @@ export default function Dashboard() {
                         mutateClientes(clientes.filter((c) => c.id !== clienteParaRemover), false)
                         
                         try {
-                          const res = await fetch(`${baseURL}/clientes/${clienteParaRemover}`, {
-                            method: 'DELETE',
-                            headers: headersEscrita(),
-                          })
-                          if (!res.ok) {
-                            const errData = await res.json().catch(() => ({}))
-                            throw new Error(errData.error || 'falha no servidor')
-                          }
+                          await api.delete(`/clientes/${clienteParaRemover}`)
                           mutateClientes()
                         } catch (error: any) {
                           // reverte exclusao caso backend falhe
                           mutateClientes()
-                          alert(`Erro ao excluir cliente: ${error.message}`)
+                          alert(`Erro ao excluir cliente: ${error.response?.data?.error || error.message}`)
                         }
                       }}
                       className="mt-3 w-full text-xs text-red-600 hover:text-red-700 font-semibold py-1 border border-red-200 hover:bg-red-50 rounded"

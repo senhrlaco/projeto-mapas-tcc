@@ -34,8 +34,9 @@ router.post('/login', async (req: Request, res: Response) => {
       throw new Error('JWT_SECRET nao definido no servidor')
     }
 
+    // injeta o nivel de acesso no payload do jwt
     const token = jwt.sign(
-      { id: usuario.id, role: usuario.role },
+      { id: usuario.id, nivel: usuario.nivel },
       process.env.JWT_SECRET as string,
       { expiresIn: '1d' },
     )
@@ -43,7 +44,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.status(200).json({
       token,
       nome: usuario.nome,
-      role: usuario.role,
+      nivel: usuario.nivel,
     })
 
   } catch (error) {

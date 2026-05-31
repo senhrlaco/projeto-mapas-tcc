@@ -7,7 +7,7 @@ export const api = axios.create({
   baseURL: `${urlConfigurada}/api`,
 });
 
-// injeta o token jwt nas requisicoes do axios
+// intercepta e anexa o token atualizado em cada chamada
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('@Savez:token');
   

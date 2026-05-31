@@ -2,14 +2,12 @@ import { useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { fetcher } from '../lib/fetcher'
-
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
-
+import { api } from '../services/api'
 type Usuario = {
   id: string
   nome: string
   username: string
-  role: string
+  nivel: string
 }
 
 export default function Usuarios() {
@@ -20,7 +18,7 @@ export default function Usuarios() {
     isLoading,
     mutate,
     error,
-  } = useSWR<Usuario[]>(`${baseURL}/usuarios`, fetcher)
+  } = useSWR<Usuario[]>('/usuarios', fetcher)
 
   const [salvando, setSalvando] = useState(false)
 
@@ -48,19 +46,12 @@ export default function Usuarios() {
     'Gestor': 50,
     'Agente': 10,
   }
-  const pesoLogado = PESOS_RBAC[loggedUser?.role || 'Agente'] || 0
+  const pesoLogado = PESOS_RBAC[loggedUser?.nivel || 'Agente'] || 0
 
   if (error && ((error as any).status === 401 || (error as any).status === 403)) {
     localStorage.removeItem('@Savez:token')
     // corrige warning do react router com componente navigate
     return <Navigate to="/login" replace />
-  }
-
-  function headersEscrita(): HeadersInit {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + localStorage.getItem('@Savez:token'),
-    }
   }
 
   function tratarFalhaDeAutenticacao(status: number) {
@@ -94,7 +85,7 @@ export default function Usuarios() {
     setNome(user.nome)
     setLogin(user.username)
     setSenha('') // senha nunca volta pro front
-    setNivel(user.role)
+    setNivel(user.nivel)
     setModalAberto(true)
   }
 
@@ -103,20 +94,11 @@ export default function Usuarios() {
 
     setSalvando(true)
     try {
-      const res = await fetch(`${baseURL}/usuarios/${id}`, {
-        method: 'DELETE',
-        headers: headersEscrita(),
-      })
-
-      tratarFalhaDeAutenticacao(res.status)
-
-      if (!res.ok) {
-        alert('Nao foi possivel excluir o usuario.')
-        return
-      }
+      await api.delete(`/usuarios/${id}`)
 
       mutate()
-    } catch {
+    } catch (err: any) {
+      tratarFalhaDeAutenticacao(err.response?.status)
       alert('Falha de conexao ao excluir usuario.')
     } finally {
       setSalvando(false)
@@ -138,22 +120,13 @@ export default function Usuarios() {
     
     setSalvando(true)
     try {
-      const res = await fetch(`${baseURL}/usuarios/${usuarioEmEdicao.id}/senha`, {
-        method: 'PATCH',
-        headers: headersEscrita(),
-        body: JSON.stringify({ novaSenha }),
-      })
-      
-      tratarFalhaDeAutenticacao(res.status)
-      if (!res.ok) {
-        alert('Nao foi possivel alterar a senha.')
-        return
-      }
+      await api.patch(`/usuarios/${usuarioEmEdicao.id}/senha`, { novaSenha })
       
       alert('Senha alterada com sucesso!')
       setModalSenhaAberto(false)
       setUsuarioEmEdicao(null)
-    } catch {
+    } catch (err: any) {
+      tratarFalhaDeAutenticacao(err.response?.status)
       alert('Falha de conexao ao alterar senha.')
     } finally {
       setSalvando(false)
@@ -176,29 +149,23 @@ export default function Usuarios() {
       const ehEdicao = usuarioEmEdicao !== null
 
       const url = ehEdicao
-        ? `${baseURL}/usuarios/${usuarioEmEdicao.id}`
-        : `${baseURL}/usuarios`
+        ? `/usuarios/${usuarioEmEdicao.id}`
+        : `/usuarios`
 
       // traduz estados locais para os campos esperados pelo servidor
-      const corpo: Record<string, unknown> = { name: nome, email: login, role: nivel }
+      const corpo: Record<string, unknown> = { name: nome, email: login, nivel }
       if (!ehEdicao) corpo.password = senha
 
-      const res = await fetch(url, {
-        method: ehEdicao ? 'PUT' : 'POST',
-        headers: headersEscrita(),
-        body: JSON.stringify(corpo),
-      })
-
-      tratarFalhaDeAutenticacao(res.status)
-
-      if (!res.ok) {
-        alert('Nao foi possivel salvar o usuario.')
-        return
+      if (ehEdicao) {
+        await api.put(url, corpo)
+      } else {
+        await api.post(url, corpo)
       }
 
       mutate()
       fecharModal()
-    } catch {
+    } catch (err: any) {
+      tratarFalhaDeAutenticacao(err.response?.status)
       alert('Falha de conexao ao salvar usuario.')
     } finally {
       setSalvando(false)
@@ -207,7 +174,7 @@ export default function Usuarios() {
 
   const bloqueado = salvando || isLoading
 
-  if (loggedUser?.role === 'Agente') {
+  if (loggedUser?.nivel === 'Agente') {
     return (
       <div className="p-8 flex items-center justify-center h-full">
         <div className="bg-red-50 text-red-600 p-6 rounded-lg text-center shadow border border-red-100">
@@ -256,11 +223,11 @@ export default function Usuarios() {
                 <tr key={u.id}>
                   <td className="px-5 py-3 text-gray-800 font-medium">{u.nome}</td>
                   <td className="px-5 py-3 text-gray-500">{u.username}</td>
-                  <td className="px-5 py-3 text-gray-500">{u.role}</td>
+                  <td className="px-5 py-3 text-gray-500">{u.nivel}</td>
                   <td className="px-5 py-3">
                     <div className="flex gap-2">
                       {/* oculta acoes para niveis inferiores */}
-                      {(loggedUser?.id === u.id || pesoLogado > (PESOS_RBAC[u.role] || 0)) && (
+                      {(loggedUser?.id === u.id || pesoLogado > (PESOS_RBAC[u.nivel] || 0)) && (
                         <>
                           <button
                             onClick={() => handleEditar(u)}
