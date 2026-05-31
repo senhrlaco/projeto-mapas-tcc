@@ -29,8 +29,12 @@ export default function Login() {
       // forca navegacao completa para que o PrivateRoute releia o localStorage
       window.location.href = '/'
 
-    } catch {
-      setErro('Nao foi possivel conectar ao servidor.')
+    } catch (error: any) {
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        setErro('Credenciais invalidas')
+      } else {
+        setErro('Nao foi possivel conectar ao servidor.')
+      }
     } finally {
       setIsLoading(false)
     }

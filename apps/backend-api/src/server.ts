@@ -19,17 +19,17 @@ app.use('/api/auth', authRoutes);
 
 app.use('/api/checkin', checkinRoutes);
 
-app.get('/ping', async (req, res) => {
+app.get('/api/ping', async (req, res) => {
   try {
     const usersCount = await prisma.user.count();
     return res.json({ status: 'ok', totalUsuarios: usersCount });
   } catch (error) {
-    console.error('[GET /ping]', error);
+    console.error('[GET /api/ping]', error);
     return res.status(500).json({ error: 'erro interno no ping' });
   }
 });
 
-app.get('/visitas', async (req, res) => {
+app.get('/api/visitas', async (req, res) => {
   try {
     const visitas = await prisma.visit.findMany({
       take: 50,
@@ -46,7 +46,7 @@ app.get('/visitas', async (req, res) => {
   }
 });
 
-app.get('/clientes', async (req, res) => {
+app.get('/api/clientes', async (req, res) => {
   try {
     const clientes = await prisma.client.findMany({
       select: { id: true, name: true, latitude: true, longitude: true, statusOperacional: true },
@@ -71,10 +71,10 @@ async function verificarToken(req: any, res: any, next: any) {
     return res.status(401).json({ error: 'Token invalido' });
   }
 }
-app.get('/usuarios', verificarToken, async (req: any, res: any) => {
+app.get('/api/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     // oculta painel para agentes
-    if (req.usuario.nivel === 'Agente') {
+    if (req.usuario.nivel === 'AGENTE') {
       return res.status(403).json({ error: 'Acesso negado para agentes' });
     }
     const usuarios = await prisma.usuario.findMany({
@@ -88,9 +88,13 @@ app.get('/usuarios', verificarToken, async (req: any, res: any) => {
   }
 });
 
-app.post('/usuarios', verificarToken, async (req: any, res: any) => {
+app.post('/api/usuarios', verificarToken, async (req: any, res: any) => {
   try {
     const { name, email, password, nivel } = req.body;
+
+    if (req.usuario.nivel === 'AGENTE') {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
+    }
 
     // bloqueia criacao de hierarquia superior
     const pesoLogado = PESOS_RBAC[req.usuario.nivel] || 0;
@@ -108,7 +112,7 @@ app.post('/usuarios', verificarToken, async (req: any, res: any) => {
         nome: name,
         login: email,
         password: hashedPassword,
-        nivel: nivel ?? 'Agente',
+        nivel: nivel ?? 'AGENTE',
       },
     });
     return res.json(usuario);
@@ -120,14 +124,14 @@ app.post('/usuarios', verificarToken, async (req: any, res: any) => {
 
 // valida hierarquia por sistema de pesos
 const PESOS_RBAC: Record<string, number> = {
-  'ADM Master': 100,
-  'Gestor': 50,
-  'Agente': 10,
+  'ADM_MASTER': 100,
+  'GESTOR': 50,
+  'AGENTE': 10,
 };
 
 
 
-app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
+app.put('/api/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { name, email, nivel } = req.body;
@@ -159,7 +163,7 @@ app.put('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   }
 });
 
-app.delete('/usuarios/:id', verificarToken, async (req: any, res: any) => {
+app.delete('/api/usuarios/:id', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const loggedUser = req.usuario;
@@ -167,12 +171,18 @@ app.delete('/usuarios/:id', verificarToken, async (req: any, res: any) => {
     const targetUser = await prisma.usuario.findUnique({ where: { id } });
     if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
 
-    // valida hierarquia por sistema de pesos
-    const pesoLogado = PESOS_RBAC[loggedUser.nivel] || 0;
-    const pesoAlvo = PESOS_RBAC[targetUser.nivel] || 0;
+    // impede usuario de excluir a propria conta
+    if (loggedUser.id === targetUser.id) {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
+    }
 
-    if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
-      return res.status(403).json({ error: 'Sem permissao para excluir este usuario' });
+    if (loggedUser.nivel === 'AGENTE') {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
+    }
+
+    // gestor so pode deletar nivel agente
+    if (loggedUser.nivel === 'GESTOR' && targetUser.nivel !== 'AGENTE') {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
     }
 
     await prisma.usuario.delete({ where: { id } });
@@ -183,22 +193,18 @@ app.delete('/usuarios/:id', verificarToken, async (req: any, res: any) => {
   }
 });
 
-app.patch('/usuarios/:id/senha', verificarToken, async (req: any, res: any) => {
+app.patch('/api/usuarios/:id/senha', verificarToken, async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { novaSenha } = req.body;
     const loggedUser = req.usuario;
 
+    if (loggedUser.nivel !== 'ADM_MASTER') {
+      return res.status(403).json({ error: 'Privilegio insuficiente' });
+    }
+
     const targetUser = await prisma.usuario.findUnique({ where: { id } });
     if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
-
-    // valida hierarquia por sistema de pesos
-    const pesoLogado = PESOS_RBAC[loggedUser.nivel] || 0;
-    const pesoAlvo = PESOS_RBAC[targetUser.nivel] || 0;
-
-    if (loggedUser.id !== targetUser.id && pesoLogado <= pesoAlvo) {
-      return res.status(403).json({ error: 'Sem permissao para alterar senha deste usuario' });
-    }
 
     // criptografa nova senha
     const hashedPassword = await bcrypt.hash(novaSenha, 10);
@@ -215,7 +221,7 @@ app.patch('/usuarios/:id/senha', verificarToken, async (req: any, res: any) => {
   }
 });
 
-app.post('/clientes', async (req, res) => {
+app.post('/api/clientes', async (req, res) => {
   try {
     const { name, address, latitude, longitude } = req.body;
 
@@ -230,7 +236,7 @@ app.post('/clientes', async (req, res) => {
   }
 });
 
-app.delete('/clientes/:id', async (req, res) => {
+app.delete('/api/clientes/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log("Tentativa de exclusão do ID:", id);
@@ -243,7 +249,7 @@ app.delete('/clientes/:id', async (req, res) => {
   }
 });
 
-app.patch('/clientes/:id/status', async (req, res) => {
+app.patch('/api/clientes/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { statusOperacional } = req.body;
@@ -267,7 +273,7 @@ app.patch('/clientes/:id/status', async (req, res) => {
   }
 });
 
-app.post('/checkin', async (req, res) => {
+app.post('/api/checkin', async (req, res) => {
   try {
     const { userId, clientId, capturedLat, capturedLng, gpsAccuracy, isMocked, statusOperacional } = req.body;
 

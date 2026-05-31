@@ -30,7 +30,7 @@ export default function Usuarios() {
   const [login, setLogin] = useState('')
   const [senha, setSenha] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
-  const [nivel, setNivel] = useState('Agente')
+  const [nivel, setNivel] = useState('AGENTE')
 
   let loggedUser: any = null
   const token = localStorage.getItem('@Savez:token')
@@ -42,11 +42,11 @@ export default function Usuarios() {
 
   // valida hierarquia por sistema de pesos
   const PESOS_RBAC: Record<string, number> = {
-    'ADM Master': 100,
-    'Gestor': 50,
-    'Agente': 10,
+    'ADM_MASTER': 100,
+    'GESTOR': 50,
+    'AGENTE': 10,
   }
-  const pesoLogado = PESOS_RBAC[loggedUser?.nivel || 'Agente'] || 0
+  const pesoLogado = PESOS_RBAC[loggedUser?.nivel || 'AGENTE'] || 0
 
   if (error && ((error as any).status === 401 || (error as any).status === 403)) {
     localStorage.removeItem('@Savez:token')
@@ -66,7 +66,7 @@ export default function Usuarios() {
     setNome('')
     setLogin('')
     setSenha('')
-    setNivel('Agente')
+    setNivel('AGENTE')
     setModalAberto(true)
   }
 
@@ -77,7 +77,7 @@ export default function Usuarios() {
     setNome('')
     setLogin('')
     setSenha('')
-    setNivel('Agente')
+    setNivel('AGENTE')
   }
 
   function handleEditar(user: Usuario) {
@@ -174,7 +174,7 @@ export default function Usuarios() {
 
   const bloqueado = salvando || isLoading
 
-  if (loggedUser?.nivel === 'Agente') {
+  if (loggedUser?.nivel === 'AGENTE') {
     return (
       <div className="p-8 flex items-center justify-center h-full">
         <div className="bg-red-50 text-red-600 p-6 rounded-lg text-center shadow border border-red-100">
@@ -192,13 +192,15 @@ export default function Usuarios() {
           <h1 className="text-2xl font-bold text-gray-800">Usuarios</h1>
           <p className="text-sm text-gray-500 mt-1">Controle de acesso ao sistema</p>
         </div>
-        <button
-          onClick={abrirModalNovo}
-          disabled={bloqueado}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold px-4 py-2 rounded-lg"
-        >
-          Novo Usuario
-        </button>
+        {loggedUser?.nivel !== 'AGENTE' && (
+          <button
+            onClick={abrirModalNovo}
+            disabled={bloqueado}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+          >
+            Novo Usuario
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -208,7 +210,9 @@ export default function Usuarios() {
               <th className="px-5 py-3 font-semibold text-gray-600">Nome</th>
               <th className="px-5 py-3 font-semibold text-gray-600">Usuario (Login)</th>
               <th className="px-5 py-3 font-semibold text-gray-600">Nivel</th>
-              <th className="px-5 py-3 font-semibold text-gray-600">Acoes</th>
+              {loggedUser?.nivel !== 'AGENTE' && (
+                <th className="px-5 py-3 font-semibold text-gray-600">Acoes</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -224,11 +228,11 @@ export default function Usuarios() {
                   <td className="px-5 py-3 text-gray-800 font-medium">{u.nome}</td>
                   <td className="px-5 py-3 text-gray-500">{u.username}</td>
                   <td className="px-5 py-3 text-gray-500">{u.nivel}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-2">
-                      {/* oculta acoes para niveis inferiores */}
-                      {(loggedUser?.id === u.id || pesoLogado > (PESOS_RBAC[u.nivel] || 0)) && (
-                        <>
+                  {loggedUser?.nivel !== 'AGENTE' && (
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        {/* oculta acoes para niveis inferiores */}
+                        {(loggedUser?.id === u.id || pesoLogado > (PESOS_RBAC[u.nivel] || 0)) && (
                           <button
                             onClick={() => handleEditar(u)}
                             disabled={bloqueado}
@@ -236,6 +240,9 @@ export default function Usuarios() {
                           >
                             Editar
                           </button>
+                        )}
+                        
+                        {loggedUser?.nivel === 'ADM_MASTER' && (
                           <button
                             onClick={() => abrirModalSenha(u)}
                             disabled={bloqueado}
@@ -243,6 +250,10 @@ export default function Usuarios() {
                           >
                             Alterar Senha
                           </button>
+                        )}
+
+                        {((loggedUser?.nivel === 'ADM_MASTER' && u.id !== loggedUser?.id) || 
+                          (loggedUser?.nivel === 'GESTOR' && u.nivel === 'AGENTE')) && (
                           <button
                             onClick={() => handleExcluir(u.id)}
                             disabled={bloqueado}
@@ -250,10 +261,10 @@ export default function Usuarios() {
                           >
                             Excluir
                           </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -317,9 +328,9 @@ export default function Usuarios() {
                   onChange={(e) => setNivel(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {pesoLogado > 50 && <option value="ADM Master">ADM Master</option>}
-                  <option value="Gestor">Gestor</option>
-                  <option value="Agente">Agente</option>
+                  {pesoLogado > 50 && <option value="ADM_MASTER">ADM_MASTER</option>}
+                  <option value="GESTOR">GESTOR</option>
+                  <option value="AGENTE">AGENTE</option>
                 </select>
               </div>
             </div>
