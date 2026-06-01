@@ -22,6 +22,7 @@ import {
   TextInput,
   Modal,
   FlatList,
+  RefreshControl,
 } from 'react-native';
 
 import * as Location from 'expo-location';
@@ -163,36 +164,47 @@ export default function CheckinScreen() {
   const [statusRelatorio, setStatusRelatorio] = useState<OpcaoRelatorio | null>(null);
   const [notaOpcional, setNotaOpcional] = useState<string>('');
   const [mostrarLista, setMostrarLista] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
+  // busca a lista de clientes na api e atualiza o estado local
+  // funcao extraida para ser reutilizada por focus, pull-to-refresh e botao do mapa
+  const buscarClientes = useCallback(async (): Promise<void> => {
+    try {
+      const { data } = await api.get('/clientes');
+      const mapeados = data.map((c: any) => {
+        const rawStatus = c.statusOperacional || 'PENDENTE';
+        return {
+          id: c.id,
+          nome: c.name,
+          endereco: c.address,
+          status: rawStatus as OpcaoRelatorio,
+          servico: ROTULOS_RELATORIO[rawStatus as OpcaoRelatorio] || 'Pendente',
+          latitude: c.latitude,
+          longitude: c.longitude,
+        };
+      });
+      setClientes(mapeados);
+      if (mapeados.length > 0) {
+        setClienteSelecionado((prev) => prev || mapeados[0]);
+      }
+    } catch (err) {
+      console.log('[API] erro ao buscar clientes', err);
+    }
+  }, []);
+
+  // recarrega lista de clientes silenciosamente no foco da tela
   useFocusEffect(
     useCallback(() => {
-      async function loadClientes() {
-        try {
-          // recarrega os clientes silenciosamente sempre que o mapa ganha foco
-          const { data } = await api.get('/clientes');
-          const mapeados = data.map((c: any) => {
-            const rawStatus = c.statusOperacional || 'PENDENTE';
-            return {
-              id: c.id,
-              nome: c.name,
-              endereco: c.address,
-              status: rawStatus as OpcaoRelatorio,
-              servico: ROTULOS_RELATORIO[rawStatus as OpcaoRelatorio] || 'Pendente',
-              latitude: c.latitude,
-              longitude: c.longitude,
-            }
-          });
-          setClientes(mapeados);
-          if (mapeados.length > 0) {
-            setClienteSelecionado((prev) => prev || mapeados[0]);
-          }
-        } catch (err) {
-          console.log('[API] erro ao buscar clientes', err);
-        }
-      }
-      loadClientes();
-    }, [])
+      buscarClientes();
+    }, [buscarClientes])
   );
+
+  // permite atualizacao manual arrastando a lista para baixo
+  const onRefreshClientes = useCallback(async (): Promise<void> => {
+    setIsRefreshing(true);
+    await buscarClientes();
+    setIsRefreshing(false);
+  }, [buscarClientes]);
 
 
   // slideAnim: translateY da gaveta — parte fora da tela e anima para SNAP.ABERTA
@@ -687,7 +699,11 @@ export default function CheckinScreen() {
         style={styles.botaoAtualizarGps}
         activeOpacity={0.75}
         disabled={estadoGps === 'capturando' || estadoGps === 'solicitando_permissao'}
-        onPress={capturarLocalizacaoAtual}
+        onPress={() => {
+          // recarrega posicao gps e lista de clientes simultaneamente
+          capturarLocalizacaoAtual();
+          buscarClientes();
+        }}
       >
         {estadoGps === 'capturando' ? (
           <ActivityIndicator size="small" color="#1d4ed8" />
@@ -862,6 +878,14 @@ export default function CheckinScreen() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ padding: 16 }}
               nestedScrollEnabled={true}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={onRefreshClientes}
+                  colors={['#1d4ed8']}
+                  tintColor="#1d4ed8"
+                />
+              }
               renderItem={({ item }) => (
                 <View style={styles.modalCard}>
                   <Text style={styles.modalCardTitle}>{item.nome}</Text>
