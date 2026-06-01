@@ -240,6 +240,8 @@ app.delete('/api/clientes/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log("Tentativa de exclusão do ID:", id);
+    // deleta todos os checkins vinculados ao cliente antes de excluir o registro principal para evitar erro de foreign key
+    await prisma.checkin.deleteMany({ where: { clienteId: id } });
     // garante exclusao do registro no banco via prisma
     await prisma.client.delete({ where: { id } });
     return res.status(200).send();
