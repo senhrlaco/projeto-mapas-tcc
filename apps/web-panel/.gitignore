@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Arquivos de IA
+.claude/
+.AGENTS.md
+.cursorrules
+.env
+.CLAUDE.md
+.antigravity/

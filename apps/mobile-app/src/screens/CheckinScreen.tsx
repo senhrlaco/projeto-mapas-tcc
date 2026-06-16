@@ -111,9 +111,9 @@ const ROTULOS_RELATORIO: Record<OpcaoRelatorio, string> = {
 };
 
 const COR_RELATORIO: Record<OpcaoRelatorio, string> = {
-  TOKEN_ENTREGUE: '#16a34a', // Verde
-  NECESSITA_DOCUMENTACAO: '#f59e0b', // Amarelo/Laranja
-  PENDENTE: '#3b82f6', // Azul
+  TOKEN_ENTREGUE: '#16a34a',
+  NECESSITA_DOCUMENTACAO: '#f59e0b',
+  PENDENTE: '#3b82f6',
 };
 
 const OPCOES_RELATORIO: OpcaoRelatorio[] = [
@@ -525,9 +525,9 @@ export default function CheckinScreen() {
     }
 
     // forca exibicao do campo de texto com tratamento de case sensitive
-    const mostrarComentario = statusRelatorio?.toUpperCase() === 'PENDENTE' || 
-                              statusRelatorio?.toUpperCase() === 'NECESSITA_DOCUMENTACAO' || 
-                              (statusRelatorio as string) === 'Necessita Documentacao';
+    const mostrarComentario = statusRelatorio?.toUpperCase() === 'PENDENTE' ||
+      statusRelatorio?.toUpperCase() === 'NECESSITA_DOCUMENTACAO' ||
+      (statusRelatorio as string) === 'Necessita Documentacao';
 
     // Estado C: atendimento em curso, exibir opcoes de relatorio
     if (mostrarComentario) {
