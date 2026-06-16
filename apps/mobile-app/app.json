@@ -26,12 +26,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "com.whitelabel.logistica",
-      "config": {
-        "googleMaps": {
-          "apiKey": "REDACTED_GOOGLE_MAPS_KEY"
-        }
-      }
+      "package": "com.whitelabel.logistica"
     },
     "plugins": [
       [
